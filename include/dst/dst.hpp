@@ -2,7 +2,7 @@
 
 #include <string>
 
-namespace greeter {
+namespace dst {
 
   /**  Language codes to be used with the Greeter class */
   enum class LanguageCode { EN, DE, ES, FR };
@@ -10,7 +10,7 @@ namespace greeter {
   /**
    * @brief A class for saying hello in multiple languages
    */
-  class Greeter {
+  class DST {
     std::string name;
 
   public:
@@ -18,7 +18,7 @@ namespace greeter {
      * @brief Creates a new greeter
      * @param name the name to greet
      */
-    Greeter(std::string name);
+    DST(std::string name);
 
     /**
      * @brief Creates a localized string containing the greeting

@@ -1,11 +1,11 @@
 #include <fmt/format.h>
-#include <greeter/greeter.h>
+#include "dst/dst.hpp"
 
-using namespace greeter;
+using namespace dst;
 
-Greeter::Greeter(std::string _name) : name(std::move(_name)) {}
+DST::DST(std::string _name) : name(std::move(_name)) {}
 
-std::string Greeter::greet(LanguageCode lang) const {
+std::string DST::greet(LanguageCode lang) const {
   switch (lang) {
     default:
     case LanguageCode::EN:
