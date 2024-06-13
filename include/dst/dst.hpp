@@ -120,6 +120,42 @@ namespace dst {
     }
 
 
+    std::pair<double, std::vector<int>> 
+        level2_rooted_at_v(int v, 
+                           double d_rv, 
+                           std::unordered_set<int> terms_left,
+                           std::unordered_map<int, std::unordered_map<int,double>> dists_t) {
+      // collect all t's for the current v
+      std::vector<int> terms_left_v;
+      std::vector<double> ds_vt;
+      for (auto t: terms_left) {
+        if (dists_t[t].find(v) == dists_t[t].end()) 
+          continue; // t is not reachable from v
+        
+        terms_left_v.push_back(t);
+        ds_vt.push_back(dists_t[t][v]);
+      }
+
+      // sort distances from v to t's
+      double den_v = std::numeric_limits<double>::max();
+      std::vector<int> terms_cov_v;
+      auto idxs = argsort(ds_vt);
+      for (size_t i=0; i < ds_vt.size(); i++) {
+        auto idx = idxs[i];
+        double den_i = (d_rv + ds_vt[idx]) / (i+1);
+        if (den_i < den_v) {
+          den_v = den_i;
+          terms_cov_v.push_back(terms_left_v[idx]);
+        }
+        else {
+          break; // stop once adding a t increases den_v
+        }
+      }
+
+      return std::make_pair(den_v, terms_cov_v);
+    }
+
+
     std::pair<double, std::unordered_map<int,int>> level2_alg() {
       // dijktra from the root
       auto p_r = dijkstra(adj, w, root);
@@ -148,33 +184,9 @@ namespace dst {
         // enum all v as the middle vertex in a 2-level tree
         for (auto v: V) {
           double d_rv {dists_r[v]};
-
-          // collect all t's for the current v
-          std::vector<int> terms_left_;
-          std::vector<double> ds_vt;
-          for (auto t: terms_left) {
-            if (dists_t[t].find(v) == dists_t[t].end()) 
-              continue; // t is not reachable from v
-            
-            terms_left_.push_back(t);
-            ds_vt.push_back(dists_t[t][v]);
-          }
-
-          // sort distances from v to t's
-          double den_v = std::numeric_limits<double>::max();
-          std::vector<int> terms_cov_v;
-          auto idxs = argsort(ds_vt);
-          for (size_t i=0; i < ds_vt.size(); i++) {
-            auto idx = idxs[i];
-            double den_i = (d_rv + ds_vt[idx]) / (i+1);
-            if (den_i < den_v) {
-              den_v = den_i;
-              terms_cov_v.push_back(terms_left_[idx]);
-            }
-            else {
-              break; // stop once adding a t increases den_v
-            }
-          }
+          auto p_v = level2_rooted_at_v(v, d_rv, terms_left, dists_t);
+          auto den_v = p_v.first;
+          auto terms_cov_v = p_v.second;
 
           // keep the best across all v
           if (den_v < den_min) {
