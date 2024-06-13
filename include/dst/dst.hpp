@@ -1,5 +1,9 @@
 #pragma once
 
+#include <limits>
+#include <utility>
+#include <numeric> // std::iota
+#include <algorithm>
 #include <string>
 #include <vector>
 #include <queue>
@@ -7,9 +11,7 @@
 #include <set>
 #include <unordered_set>
 #include <unordered_map>
-#include <utility>
 #include <tuple>
-#include <algorithm>
 
 
 namespace dst {
@@ -30,12 +32,12 @@ namespace dst {
     pq.emplace(0, NONVERTEX, source);
 
     while (!pq.empty()) {
-      double du;
+      double d_u;
       int u_prev, u; 
-      std::tie(du, u_prev, u) = pq.top();
+      std::tie(d_u, u_prev, u) = pq.top();
       pq.pop();
 
-      if (distances.find(u) != distances.end() and du > distances[u]) 
+      if (distances.find(u) != distances.end() and d_u > distances[u]) 
         continue;
 
       trace[u] = u_prev;
@@ -50,6 +52,25 @@ namespace dst {
     }
 
     return std::make_pair(distances, trace);
+  }
+
+
+  template <typename T>
+  std::vector<size_t> argsort(const std::vector<T> &v) {
+    // https://stackoverflow.com/questions/1577475/c-sorting-and-keeping-track-of-indexes
+
+    // initialize original index locations
+    std::vector<size_t> idx(v.size());
+    iota(idx.begin(), idx.end(), 0); // fill idx by increasing values
+
+    // sort indexes based on comparing values in v
+    // using std::stable_sort instead of std::sort
+    // to avoid unnecessary index re-orderings
+    // when v contains elements of equal values 
+    stable_sort(idx.begin(), idx.end(),
+        [&v](size_t i1, size_t i2) {return v[i1] < v[i2];});
+
+    return idx;
   }
 
 
@@ -97,6 +118,106 @@ namespace dst {
           w[{t, t_dm}] = 0;
         }
     }
+
+
+    std::pair<double, std::unordered_map<int,int>> level2_alg() {
+      // dijktra from the root
+      auto p_r = dijkstra(adj, w, root);
+      auto dists_r = p_r.first;
+      auto trace_r = p_r.second;
+
+      // dijktra from each terminal
+      std::unordered_map<int, std::unordered_map<int,int>> trace_t;
+      std::unordered_map<int, std::unordered_map<int,double>> dists_t;
+      for (auto t: terms_dm) {
+        auto p_t = dijkstra(adj_r, w, t, true);
+        dists_t[t] = p_t.first;
+        trace_t[t] = p_t.second;
+      }
+
+      // iteratively add 2-level partial trees
+      std::unordered_map<int,int> trace; // trace "short-cut" chosen 2-level trees
+      std::set<std::pair<int,int>> edges_marked;
+      std::unordered_set<int> terms_left(terms_dm.begin(), terms_dm.end());
+      while (terms_left.size() > 0) {
+        // used to keep track of the best v so far
+        int v_min {NONVERTEX};
+        std::vector<int> terms_min;
+        double den_min = std::numeric_limits<double>::max();
+
+        // enum all v as the middle vertex in a 2-level tree
+        for (auto v: V) {
+          double d_rv {dists_r[v]};
+
+          // collect all t's for the current v
+          std::vector<int> terms_left_;
+          std::vector<double> ds_vt;
+          for (auto t: terms_left) {
+            if (dists_t[t].find(v) == dists_t[t].end()) 
+              continue; // t is not reachable from v
+            
+            terms_left_.push_back(t);
+            ds_vt.push_back(dists_t[t][v]);
+          }
+
+          // sort distances from v to t's
+          double den_v = std::numeric_limits<double>::max();
+          std::vector<int> terms_cov_v;
+          auto idxs = argsort(ds_vt);
+          for (size_t i=0; i < ds_vt.size(); i++) {
+            auto idx = idxs[i];
+            double den_i = (d_rv + ds_vt[idx]) / (i+1);
+            if (den_i < den_v) {
+              den_v = den_i;
+              terms_cov_v.push_back(terms_left_[idx]);
+            }
+            else {
+              break; // stop once adding a t increases den_v
+            }
+          }
+
+          // keep the best across all v
+          if (den_v < den_min) {
+            v_min = v;
+            terms_min = terms_cov_v;
+            den_min = den_v;
+          }
+        }
+
+        // the rest terminals are not reachable
+        if (terms_min.size() == 0)
+          break;
+
+        // merge the best 2-level partial tree
+        if (trace.find(v_min) == trace.end())
+          trace[v_min] = root;
+        for (auto t: terms_min) {
+          trace[t] = v_min;
+          terms_left.erase(t);
+        }
+        // mark the path from root to v
+        auto u = v_min;
+        while (trace_r[u] != NONVERTEX) {
+          edges_marked.insert({trace_r[u], u});
+          u = trace_r[u];
+        }
+        // mark the path from v to each t
+        for (auto t: terms_min) {
+          u = v_min;
+          while (trace_t[t][u] != NONVERTEX) {
+            edges_marked.insert({u, trace_t[t][u]});
+            u = trace_t[t][u];
+          }
+        }
+      }
+
+      double total {0};
+      for (auto e: edges_marked) {
+        total += w[{e.first, e.second}];
+      }
+      return std::make_pair(total, trace);
+    }
+
 
     double naive_alg() {
       auto p_ = dijkstra(adj, w, root);

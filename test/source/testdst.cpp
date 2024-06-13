@@ -13,6 +13,22 @@
 TEST_CASE("level2_alg") {
   using namespace dst;
 
+  std::vector<std::pair<int,int>> edges {std::make_pair(0,1), 
+                                         std::make_pair(0,2), 
+                                         std::make_pair(0,3), 
+                                         std::make_pair(0,4), 
+                                         std::make_pair(1,11), 
+                                         std::make_pair(2,12), 
+                                         std::make_pair(3,13), 
+                                         std::make_pair(4,11), 
+                                         std::make_pair(4,12), 
+                                         std::make_pair(4,13)};
+  std::vector<double> weights {1,1,1,2, 2,2,2, 1,1,1};
+  std::vector<int> terms {11,12,13};
+  DST dt = DST(edges, weights, 0, terms);
+
+  CHECK(dt.naive_alg() == 1*3 + 2*3);
+  CHECK(dt.level2_alg().first == 2 + 1*3);
 }
 
 
