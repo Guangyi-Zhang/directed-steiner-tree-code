@@ -4,9 +4,12 @@
 #include "dst/version.hpp"
 
 #include <string>
-#include <vector>
 #include <map>
+#include <vector>
+#include <unordered_set>
+#include <unordered_map>
 #include <utility>
+#include <tuple>
 
 
 
@@ -28,7 +31,10 @@ TEST_CASE("level2_alg") {
   DST dt = DST(edges, weights, 0, terms);
 
   CHECK(dt.naive_alg() == 1*3 + 2*3);
-  CHECK(dt.level2_alg().first == 2 + 1*3);
+  auto tree = dt.level2_alg();
+  CHECK(tree.cost == 2 + 1*3);
+  CHECK(tree.cost_sc == 2 + 1*3);
+  CHECK((tree.terms_cov == std::unordered_set<int> {14,15,16}));
 }
 
 
@@ -46,7 +52,7 @@ TEST_CASE("DST") {
   std::vector<int> terms {2,3,5};
   DST dt = DST(edges, weights, 0, terms);
 
-  CHECK(dt.terms_dm == (std::vector<int> {6,7,8}));
+  CHECK(dt.terms_dm == (std::unordered_set<int> {6,7,8}));
   
   double cost = dt.naive_alg();
   CHECK(cost == 1+1+2-1);
@@ -107,4 +113,17 @@ TEST_CASE("dijkstra") {
   CHECK (trace[4] == NONVERTEX);
   CHECK (trace[3] == 4);
   CHECK (trace.find(2) == trace.end());
+}
+
+
+TEST_CASE("misc") {
+  using namespace dst;
+
+  std::unordered_set<int> st {1,2,3};
+  std::map<int,std::string> m {std::make_pair(1,"aa"), 
+                               std::make_pair(2,"bb")};
+  CHECK(has_key(st, 1));
+  CHECK(not has_key(st, 4));
+  CHECK(has_key(m, 2));
+  CHECK(not has_key(m, 3));
 }
