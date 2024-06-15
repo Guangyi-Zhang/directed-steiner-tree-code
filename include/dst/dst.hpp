@@ -90,6 +90,8 @@ namespace dst {
 
   class PartialTree {
   public:
+    static const std::map<std::pair<int,int>, double>* w; 
+
     int root;
     double cost {0}, cost_sc {0};
     std::unordered_map<int,int> trace_sc; // trace "short-cut" chosen 2-level trees
@@ -102,24 +104,38 @@ namespace dst {
       trace_sc[root] = NONVERTEX;
     }
 
-    PartialTree(int root, int u, double d_ru) : 
-        root {root} {
-      trace[root] = NONVERTEX;
-      trace_sc[root] = NONVERTEX;
-      trace[u] = root;
-      trace_sc[u] = root;
-      cost_sc += d_ru;
-      cost += d_ru;
+    PartialTree(std::pair<int,int> arc, double w_arc, 
+        std::unordered_map<int,int> trace_arc, 
+        bool reverse=false,
+        bool is_terminal=false) : 
+        root {arc.first} {
+      if (is_terminal)
+        terms_cov.insert(arc.second);
+
+      trace[arc.first] = NONVERTEX;
+      trace_sc[arc.first] = NONVERTEX;
+      trace[arc.second] = arc.first;
+      trace_sc[arc.second] = arc.first;
+
+      cost_sc += w_arc;
+
+      auto v = reverse? arc.first: arc.second;
+      while (trace_arc.at(v) != NONVERTEX) {
+        auto e = reverse? std::make_pair(v, trace_arc.at(v)) : 
+                          std::make_pair(trace_arc.at(v), v);
+        cost += PartialTree::w->at(e);
+        trace[e.second] = e.first;
+        v = trace_arc.at(v);
+      }
     }
 
-    void append(PartialTree tree, 
-                std::map<std::pair<int,int>, double> edgeweights) {
-      // either append r-u-{v}-{t}, or u-{v}-{r}
+    void append(PartialTree tree) {
+      // append either r-u-{v}-{t}, or u-{v}-{r}
       cost_sc += tree.cost_sc; // ok to count (u,v) multi times
       auto es = edges();
       for (auto &e: tree.edges()) {
         if (not has_key(es, e)) {
-          cost += edgeweights.at(e);
+          cost += PartialTree::w->at(e);
         }
       }
 
@@ -163,6 +179,8 @@ namespace dst {
       return es;
     }
   };
+
+  const std::map<std::pair<int,int>, double>* PartialTree::w = nullptr; 
 
 
   /**
@@ -211,16 +229,20 @@ namespace dst {
         adj_r[t_dm].push_back(t);
         w[{t, t_dm}] = 0;
       }
+
+      PartialTree::w = &w;
     }
 
 
-    std::pair<double, std::vector<int>> 
-        level2_through_v(
-          int v, 
-          double d_rv, 
-          std::unordered_map<int, std::unordered_map<int,double>> dists_t,
-          std::unordered_set<int> terms_left
-        ){
+    PartialTree level2_through_v(
+        int r,
+        int v, 
+        double d_rv, 
+        std::unordered_map<int,int> trace_r,
+        std::unordered_map<int, std::unordered_map<int,double>> dists_t,
+        std::unordered_map<int, std::unordered_map<int,int>> trace_t,
+        std::unordered_set<int> terms_left
+    ){
       // collect all t's for the current v
       std::vector<int> terms_left_v;
       std::vector<double> ds_vt;
@@ -233,22 +255,26 @@ namespace dst {
       }
 
       // sort distances from v to t's
-      double cost_v {d_rv};
-      std::vector<int> terms_cov_v;
+      PartialTree tree {std::make_pair(r, v), d_rv, trace_r};
       auto idxs = argsort(ds_vt);
       for (size_t i=0; i < ds_vt.size(); i++) {
         auto idx = idxs[i];
-        double den_i = (cost_v + ds_vt[idx]) / (i+1);
-        if (i == 0 or den_i < cost_v / i) {
-          cost_v += ds_vt[idx];
-          terms_cov_v.push_back(terms_left_v[idx]);
+        auto t = terms_left_v[idx];
+        double den_i = (tree.cost_sc + ds_vt[idx]) / (i+1);
+        if (i == 0 or den_i < tree.density()) {
+          PartialTree tree_i {std::make_pair(v, t), 
+                              ds_vt[idx],
+                              trace_t[t],
+                              true,
+                              true};
+          tree.append(tree_i);
         }
         else {
           break; // stop once adding a t increases den_v
         }
       }
 
-      return std::make_pair(cost_v, terms_cov_v);
+      return tree;
     }
 
 
@@ -275,67 +301,31 @@ namespace dst {
       PartialTree par {r};
       std::unordered_set<int> terms_left(terms_cand.begin(), terms_cand.end());
       while (terms_left.size() > 0) {
-        // used to keep track of the best v so far
-        int v_min {NONVERTEX};
-        std::vector<int> terms_min;
-        double den_min = std::numeric_limits<double>::max();
-
         // enum all v as the middle vertex in a 2-level tree
+        PartialTree best {r};
         for (auto v: V_cand) {
-          if (not has_key(dists_r, v))
+          if (not has_key(dists_r, v) or r == v)
             continue;
           //fmt::println("level2_rooted_at_{} v: {}", r, v);
           double d_rv {dists_r.at(v)};
-          auto p_v = level2_through_v(v, d_rv, dists_t, terms_left);
-          auto cost_v = p_v.first;
-          auto terms_cov_v = p_v.second;
-          //fmt::println("level2_rooted_at_{} terms_cov_v: {}", r, terms_cov_v);
+          auto tree_v = level2_through_v(r, v, d_rv, trace_r, 
+              dists_t, trace_t, terms_left);
 
           // keep the best across all v
-          if (cost_v/terms_cov_v.size() < den_min) {
-            v_min = v;
-            terms_min = terms_cov_v;
-            den_min = cost_v/terms_cov_v.size();
-          }
+          if (tree_v.density() < best.density())
+            best = tree_v;
         }
 
         // the rest terminals are not reachable
-        if (terms_min.size() == 0)
+        if (best.terms_cov.size() == 0)
           break;
 
         // merge the best 2-level partial tree
-        par.trace_sc[v_min] = r;
-        par.cost_sc += dists_r.at(v_min); // ok to count (r,v_min) multi times
-        for (auto t: terms_min) {
-          par.trace_sc[t] = v_min;
-          par.cost_sc += dists_t.at(t).at(v_min);
+        for (auto t: best.terms_cov)
           terms_left.erase(t);
-        }
-        // mark the path from root to v
-        auto u = v_min;
-        while (trace_r.at(u) != NONVERTEX) {
-          par.trace[u] = trace_r.at(u);
-          u = trace_r.at(u);
-        }
-        // mark the path from v to each t
-        for (auto t: terms_min) {
-          u = v_min;
-          while (trace_t.at(t).at(u) != NONVERTEX) {
-            par.trace[trace_t.at(t).at(u)] = u;
-            u = trace_t.at(t).at(u);
-          }
-        }
+        par.append(best);
       }
 
-      for (auto t: terms_cand) {
-        if (not has_key(terms_left, t))
-          par.terms_cov.insert(t);
-      }
-      double total {0};
-      for (auto e: par.edges()) {
-        total += w.at({e.first, e.second});
-      }
-      par.cost = total;
       return par;
     }
 
@@ -421,7 +411,7 @@ namespace dst {
 
           // add 2-level trees rooted at u 
           //fmt::println("V_: {}", V_);
-          PartialTree tree_u(root, u, d_ru);
+          PartialTree tree_u(std::make_pair(root, u), d_ru, trace_r);
           std::unordered_set<int> terms_left_u(terms_left.begin(), terms_left.end());
           while (terms_left_u.size() > 0) {
             auto tree2_u = level2_rooted_at_r(u, V_, terms_left_u);
@@ -444,7 +434,7 @@ namespace dst {
             // TODO: another LB using terms_left and den(T_u)
 
             // merge tree2_u
-            tree_u.append(tree2_u, w);
+            tree_u.append(tree2_u);
             assert(std::abs(den_new - tree_u.density()) < 1e-9);
             if (best.density() > tree_u.density()) {
               best = tree_u; // copy
@@ -458,7 +448,7 @@ namespace dst {
         //fmt::println("best terms_cov: {}", best.terms_cov);
         for (auto t: best.terms_cov)
           terms_left.erase(t);
-        tree3.append(best, w);
+        tree3.append(best);
       }
 
       return tree3;
@@ -491,4 +481,4 @@ namespace dst {
 
   };
 
-}  // namespace greeter
+}  // namespace dst
