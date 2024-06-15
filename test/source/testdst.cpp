@@ -11,6 +11,57 @@
 #include <utility>
 #include <tuple>
 
+/*
+  TODO: 
+  - more than 1 subtrees
+*/
+
+TEST_CASE("level3_alg") {
+  using namespace dst;
+  /*
+   +------0-------+    
+   |      +       |    
+   1    +-3-+     2    
+   |\   |   |    /|    
+   | \ 11   12  | |    
+   |  \/|    |\ / |    
+   |  /\|    | \  |    
+   | -  -    || \ |    
+   21   22   23  -24  
+  */
+
+  // r - u - v - {t}
+  // 4 + 2*1 + 4*1 = 10
+  // (2 + 2*2) * 2 = 12
+
+  std::vector<std::pair<int,int>> edges {std::make_pair(0,1), 
+                                         std::make_pair(0,2), 
+                                         std::make_pair(0,3), 
+                                         std::make_pair(1,21), 
+                                         std::make_pair(1,22), 
+                                         std::make_pair(2,23), 
+                                         std::make_pair(2,24), 
+                                         std::make_pair(3,11), 
+                                         std::make_pair(3,12), 
+                                         std::make_pair(11,21), 
+                                         std::make_pair(11,22), 
+                                         std::make_pair(12,23), 
+                                         std::make_pair(12,24)};
+  std::vector<double> weights {2,2,4, 2,2,2,2, 1,1, 1,1,1,1};
+  std::vector<int> terms {21,22,23,24};
+  DST dt = DST(edges, weights, 0, terms);
+
+  // CHECK(dt.naive_alg() == 1*3 + 2*3);
+  auto tree2 = dt.level2_alg();
+  CHECK(tree2.cost == (2 + 2*2) * 2);
+  CHECK(tree2.cost_sc == (2 + 2*2) * 2);
+  CHECK((tree2.terms_cov == std::unordered_set<int> {25,26,27,28}));
+
+  // auto tree3 = dt.level3_alg(0.99);
+  // CHECK(tree3.cost == 4 + 2*1 + 4*1);
+  // CHECK(tree3.cost_sc == 4 + 2*1 + 4*1);
+  // CHECK((tree3.terms_cov == std::unordered_set<int> {21,22,23,24}));
+}
 
 
 TEST_CASE("level2_alg") {
@@ -86,12 +137,12 @@ TEST_CASE("dijkstra") {
   auto p1 = dijkstra(dt.adj, dt.w, 0);
   auto dists = p1.first;
   auto trace = p1.second;
-  CHECK(dists[0] == 0);
-  CHECK(dists[1] == 1);
-  CHECK(dists[2] == 1);
-  CHECK(dists[3] == 1);
-  CHECK(dists[4] == 2);
-  CHECK(trace[4] == 3);
+  CHECK(dists.at(0) == 0);
+  CHECK(dists.at(1) == 1);
+  CHECK(dists.at(2) == 1);
+  CHECK(dists.at(3) == 1);
+  CHECK(dists.at(4) == 2);
+  CHECK(trace.at(4) == 3);
 
   auto p2 = dijkstra(dt.adj, dt.w, 4);
   dists = p2.first;
@@ -99,19 +150,19 @@ TEST_CASE("dijkstra") {
   CHECK (dists.find(0) == dists.end());
   CHECK (dists.find(1) == dists.end());
   CHECK (dists.find(2) == dists.end());
-  CHECK (dists[3] == 1);
-  CHECK (dists[4] == 0);
+  CHECK (dists.at(3) == 1);
+  CHECK (dists.at(4) == 0);
 
   auto p3 = dijkstra(dt.adj_r, dt.w, 4, true);
   dists = p3.first;
   trace = p3.second;
-  CHECK (dists[0] == 2);
+  CHECK (dists.at(0) == 2);
   CHECK (dists.find(1) == dists.end());
   CHECK (dists.find(2) == dists.end());
-  CHECK (dists[3] == 1);
-  CHECK (dists[4] == 0);
-  CHECK (trace[4] == NONVERTEX);
-  CHECK (trace[3] == 4);
+  CHECK (dists.at(3) == 1);
+  CHECK (dists.at(4) == 0);
+  CHECK (trace.at(4) == NONVERTEX);
+  CHECK (trace.at(3) == 4);
   CHECK (trace.find(2) == trace.end());
 }
 

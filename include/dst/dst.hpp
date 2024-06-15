@@ -50,16 +50,16 @@ namespace dst {
       std::tie(d_u, u_prev, u) = pq.top();
       pq.pop();
 
-      if (has_key(distances, u) and d_u > distances[u]) 
+      if (has_key(distances, u) and d_u > distances.at(u)) 
         continue;
 
       trace[u] = u_prev;
       for (const auto& v: adj[u]) {
-          double weight = reverse? edgeweight[{v,u}] : edgeweight[{u,v}];
+          double weight = reverse? edgeweight.at({v,u}) : edgeweight.at({u,v});
 
-          if (not has_key(distances, v) or distances[v] > distances[u] + weight) {
-              distances[v] = distances[u] + weight;
-              pq.emplace(distances[v], u, v);
+          if (not has_key(distances, v) or distances.at(v) > distances.at(u) + weight) {
+              distances[v] = distances.at(u) + weight;
+              pq.emplace(distances.at(v), u, v);
           }
       }
     }
@@ -118,7 +118,7 @@ namespace dst {
       auto es = edges();
       for (auto &e: tree.edges()) {
         if (not has_key(es, e)) {
-          cost += edgeweights[e];
+          cost += edgeweights.at(e);
         }
       }
 
@@ -224,11 +224,11 @@ namespace dst {
       std::vector<int> terms_left_v;
       std::vector<double> ds_vt;
       for (auto t: terms_left) {
-        if (not has_key(dists_t[t], v)) 
+        if (not has_key(dists_t.at(t), v)) 
           continue; // t is not reachable from v
         
         terms_left_v.push_back(t);
-        ds_vt.push_back(dists_t[t][v]);
+        ds_vt.push_back(dists_t.at(t).at(v));
       }
 
       // sort distances from v to t's
@@ -271,7 +271,7 @@ namespace dst {
       }
 
       // iteratively add 2-level partial trees
-      PartialTree par {root};
+      PartialTree par {r};
       std::unordered_set<int> terms_left(terms_cand.begin(), terms_cand.end());
       while (terms_left.size() > 0) {
         // used to keep track of the best v so far
@@ -281,7 +281,9 @@ namespace dst {
 
         // enum all v as the middle vertex in a 2-level tree
         for (auto v: V_cand) {
-          double d_rv {dists_r[v]};
+          if (not has_key(dists_r, v))
+            continue;
+          double d_rv {dists_r.at(v)};
           auto p_v = level2_through_v(v, d_rv, dists_t, terms_left);
           auto cost_v = p_v.first;
           auto terms_cov_v = p_v.second;
@@ -299,25 +301,25 @@ namespace dst {
           break;
 
         // merge the best 2-level partial tree
-        par.trace_sc[v_min] = root;
-        par.cost_sc += dists_r[v_min]; // ok to count (r,v_min) multi times
+        par.trace_sc[v_min] = r;
+        par.cost_sc += dists_r.at(v_min); // ok to count (r,v_min) multi times
         for (auto t: terms_min) {
           par.trace_sc[t] = v_min;
-          par.cost_sc += dists_t[t][v_min];
+          par.cost_sc += dists_t.at(t).at(v_min);
           terms_left.erase(t);
         }
         // mark the path from root to v
         auto u = v_min;
-        while (trace_r[u] != NONVERTEX) {
-          par.trace[u] = trace_r[u];
-          u = trace_r[u];
+        while (trace_r.at(u) != NONVERTEX) {
+          par.trace[u] = trace_r.at(u);
+          u = trace_r.at(u);
         }
         // mark the path from v to each t
         for (auto t: terms_min) {
           u = v_min;
-          while (trace_t[t][u] != NONVERTEX) {
-            par.trace[trace_t[t][u]] = u;
-            u = trace_t[t][u];
+          while (trace_t.at(t).at(u) != NONVERTEX) {
+            par.trace[trace_t.at(t).at(u)] = u;
+            u = trace_t.at(t).at(u);
           }
         }
       }
@@ -328,7 +330,7 @@ namespace dst {
       }
       double total {0};
       for (auto e: par.edges()) {
-        total += w[{e.first, e.second}];
+        total += w.at({e.first, e.second});
       }
       par.cost = total;
       return par;
@@ -383,12 +385,14 @@ namespace dst {
         PartialTree best {tree2}; // copy
         for (auto u: V) {
           // prune by d(r,u)
-          if (alpha * best.density() <= den2 - dists_r[u])
+          if (not has_key(dists_r, u))
+            continue;
+          if (alpha * best.density() <= den2 - dists_r.at(u))
             continue;
           
           // collect u's children v by d(u,v)
           std::unordered_set<int> V_; // keep promising v's here
-          auto i_u = v2i[u];
+          auto i_u = v2i.at(u);
           auto d_ru = Ld_sorted[i_u];
           // sweep v's ranked before u
           auto i_v = i_u - 1;
@@ -463,15 +467,15 @@ namespace dst {
             continue; // disconnected graph
 
         int v {t};
-        while (trace[v] != NONVERTEX) {
-          edges_marked.insert({trace[v], v});
-          v = trace[v];
+        while (trace.at(v) != NONVERTEX) {
+          edges_marked.insert({trace.at(v), v});
+          v = trace.at(v);
         }
       }
 
       double total {0};
       for (auto e: edges_marked)
-        total = total + w[{e.first, e.second}];
+        total = total + w.at({e.first, e.second});
       return total;
     }
 
