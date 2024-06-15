@@ -1,5 +1,6 @@
 #pragma once
 
+#include <cmath>
 #include <limits>
 #include <type_traits> // is_same
 #include <utility>
@@ -90,7 +91,7 @@ namespace dst {
   class PartialTree {
   public:
     int root;
-    double cost, cost_sc;
+    double cost {0}, cost_sc {0};
     std::unordered_map<int,int> trace_sc; // trace "short-cut" chosen 2-level trees
     std::unordered_map<int,int> trace;
     std::unordered_set<int> terms_cov;
@@ -283,10 +284,12 @@ namespace dst {
         for (auto v: V_cand) {
           if (not has_key(dists_r, v))
             continue;
+          //fmt::println("level2_rooted_at_{} v: {}", r, v);
           double d_rv {dists_r.at(v)};
           auto p_v = level2_through_v(v, d_rv, dists_t, terms_left);
           auto cost_v = p_v.first;
           auto terms_cov_v = p_v.second;
+          //fmt::println("level2_rooted_at_{} terms_cov_v: {}", r, terms_cov_v);
 
           // keep the best across all v
           if (cost_v/terms_cov_v.size() < den_min) {
@@ -375,6 +378,7 @@ namespace dst {
           terms_left(terms_dm.begin(), terms_dm.end());
       PartialTree tree3 {root};
       while (terms_left.size() > 0) {
+        //fmt::println("terms_left: {}", terms_left);
         // build a 2-level solution as upper bound
         auto tree2 = level2_rooted_at_r(root, V, terms_left);
         if(tree2.terms_cov.size() == 0)
@@ -387,9 +391,11 @@ namespace dst {
           // prune by d(r,u)
           if (not has_key(dists_r, u))
             continue;
+          // prune by d(r,u)
           if (alpha * best.density() <= den2 - dists_r.at(u))
             continue;
-          
+          //fmt::println("u: {}", u);
+
           // collect u's children v by d(u,v)
           std::unordered_set<int> V_; // keep promising v's here
           auto i_u = v2i.at(u);
@@ -398,7 +404,7 @@ namespace dst {
           auto i_v = i_u - 1;
           while (i_v >= 0 and i_u >= 1) {
             auto d_rv = Ld_sorted[i_v];
-            if (alpha * d_rv > d_ru - d_rv)
+            if (alpha * d_rv <= d_ru - d_rv)
               break;
             V_.insert(Lv_sorted[i_v]);
             i_v -= 1;
@@ -407,13 +413,14 @@ namespace dst {
           i_v = i_u + 1;
           while (i_v < Lv.size()) {
             auto d_rv = Ld_sorted[i_v];
-            if (alpha * d_rv > d_ru - d_rv) 
+            if (alpha * d_rv <= d_rv - d_ru) 
               break;
             V_.insert(Lv_sorted[i_v]);
             i_v += 1;
           }
 
           // add 2-level trees rooted at u 
+          //fmt::println("V_: {}", V_);
           PartialTree tree_u(root, u, d_ru);
           std::unordered_set<int> terms_left_u(terms_left.begin(), terms_left.end());
           while (terms_left_u.size() > 0) {
@@ -438,7 +445,7 @@ namespace dst {
 
             // merge tree2_u
             tree_u.append(tree2_u, w);
-            assert(den_new == tree_u.cost_sc);
+            assert(std::abs(den_new - tree_u.density()) < 1e-9);
             if (best.density() > tree_u.density()) {
               best = tree_u; // copy
             }
@@ -448,6 +455,9 @@ namespace dst {
           }
         }
 
+        //fmt::println("best terms_cov: {}", best.terms_cov);
+        for (auto t: best.terms_cov)
+          terms_left.erase(t);
         tree3.append(best, w);
       }
 

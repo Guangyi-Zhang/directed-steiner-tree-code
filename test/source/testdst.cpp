@@ -51,16 +51,18 @@ TEST_CASE("level3_alg") {
   std::vector<int> terms {21,22,23,24};
   DST dt = DST(edges, weights, 0, terms);
 
-  // CHECK(dt.naive_alg() == 1*3 + 2*3);
+  double cost = dt.naive_alg();
+  CHECK(cost == (2 + 2*2) * 2);
+
   auto tree2 = dt.level2_alg();
   CHECK(tree2.cost == (2 + 2*2) * 2);
   CHECK(tree2.cost_sc == (2 + 2*2) * 2);
   CHECK((tree2.terms_cov == std::unordered_set<int> {25,26,27,28}));
 
-  // auto tree3 = dt.level3_alg(0.99);
-  // CHECK(tree3.cost == 4 + 2*1 + 4*1);
-  // CHECK(tree3.cost_sc == 4 + 2*1 + 4*1);
-  // CHECK((tree3.terms_cov == std::unordered_set<int> {21,22,23,24}));
+  auto tree3 = dt.level3_alg(0.99);
+  CHECK(tree3.cost == 4 + 2*1 + 4*1);
+  CHECK(tree3.cost_sc == 4 + 2*1 + 4*1);
+  CHECK((tree3.terms_cov == std::unordered_set<int> {25,26,27,28}));
 }
 
 
