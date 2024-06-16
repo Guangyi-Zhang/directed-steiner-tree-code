@@ -2,12 +2,9 @@
 
 #include <cmath>
 #include <limits>
-#include <type_traits> // is_same
 #include <utility>
 #include <cassert>
-#include <numeric> // std::iota
 #include <algorithm>
-#include <iterator> // inserter
 #include <string>
 #include <vector>
 #include <queue>
@@ -18,23 +15,16 @@
 #include <tuple>
 
 #include <fmt/ranges.h>
+#include <dst/consts.hpp>
+#include <dst/utils.hpp>
+#include <dst/tree.hpp>
 
 
 namespace dst {
 
-  constexpr int NONVERTEX {-1};
-
-
-  template <typename T, typename U>
-  bool has_key(const T& container, const U& key) {
-    // only works for set and map!
-    return (container.find(key) != container.end());
-  }
-
-  
   std::pair<std::unordered_map<int,double>, 
-            std::unordered_map<int,int>> dijkstra(std::map<int, std::vector<int>> adj, 
-                                                  std::map<std::pair<int,int>, double> edgeweight, 
+            std::unordered_map<int,int>> dijkstra(const std::map<int, std::vector<int>> &adj, 
+                                                  const std::map<std::pair<int,int>, double> &edgeweight, 
                                                   int source,
                                                   bool reverse=false) {
     std::unordered_map<int,double> distances;
@@ -55,7 +45,9 @@ namespace dst {
         continue;
 
       trace[u] = u_prev;
-      for (const auto& v: adj[u]) {
+      if (not has_key(adj, u))
+        continue;
+      for (const auto& v: adj.at(u)) {
           double weight = reverse? edgeweight.at({v,u}) : edgeweight.at({u,v});
 
           if (not has_key(distances, v) or distances.at(v) > distances.at(u) + weight) {
@@ -67,120 +59,6 @@ namespace dst {
 
     return std::make_pair(distances, trace);
   }
-
-
-  template <typename T>
-  std::vector<size_t> argsort(const std::vector<T> &v) {
-    // https://stackoverflow.com/questions/1577475/c-sorting-and-keeping-track-of-indexes
-
-    // initialize original index locations
-    std::vector<size_t> idx(v.size());
-    iota(idx.begin(), idx.end(), 0); // fill idx by increasing values
-
-    // sort indexes based on comparing values in v
-    // using std::stable_sort instead of std::sort
-    // to avoid unnecessary index re-orderings
-    // when v contains elements of equal values 
-    stable_sort(idx.begin(), idx.end(),
-        [&v](size_t i1, size_t i2) {return v[i1] < v[i2];});
-
-    return idx;
-  }
-
-
-  class PartialTree {
-  public:
-    static const std::map<std::pair<int,int>, double>* w; 
-
-    int root;
-    double cost {0}, cost_sc {0};
-    std::unordered_map<int,int> trace_sc; // trace "short-cut" chosen 2-level trees
-    std::unordered_map<int,int> trace;
-    std::unordered_set<int> terms_cov;
-
-    PartialTree(int root) : 
-        root {root} {
-      trace[root] = NONVERTEX;
-      trace_sc[root] = NONVERTEX;
-    }
-
-    PartialTree(std::pair<int,int> arc, double w_arc, 
-        std::unordered_map<int,int> trace_arc, 
-        bool reverse=false,
-        bool is_terminal=false) : 
-        root {arc.first} {
-      if (is_terminal)
-        terms_cov.insert(arc.second);
-
-      trace[arc.first] = NONVERTEX;
-      trace_sc[arc.first] = NONVERTEX;
-      trace[arc.second] = arc.first;
-      trace_sc[arc.second] = arc.first;
-
-      cost_sc += w_arc;
-
-      auto v = reverse? arc.first: arc.second;
-      while (trace_arc.at(v) != NONVERTEX) {
-        auto e = reverse? std::make_pair(v, trace_arc.at(v)) : 
-                          std::make_pair(trace_arc.at(v), v);
-        cost += PartialTree::w->at(e);
-        trace[e.second] = e.first;
-        v = trace_arc.at(v);
-      }
-    }
-
-    void append(PartialTree tree) {
-      // append either r-u-{v}-{t}, or u-{v}-{r}
-      cost_sc += tree.cost_sc; // ok to count (u,v) multi times
-      auto es = edges();
-      for (auto &e: tree.edges()) {
-        if (not has_key(es, e)) {
-          cost += PartialTree::w->at(e);
-        }
-      }
-
-      for (auto t: tree.terms_cov) {
-        terms_cov.insert(t);
-      }
-
-      for (auto &p: tree.trace_sc) {
-        // won't happen: u->v and w->v
-        // may happen: -1->u in tree while r->u
-        if (not has_key(trace_sc, p.first))
-          trace_sc[p.first] = p.second;
-      }
-      for (auto &p: tree.trace) {
-        if (not has_key(trace, p.first))
-          trace[p.first] = p.second;
-      }
-    }
-
-    double density() const {
-      if (terms_cov.size() == 0)
-        return std::numeric_limits<int>::max();
-      return cost_sc / terms_cov.size();
-    }
-
-    bool zero_coverage() const {
-      return terms_cov.size() == 0 ? true: false;
-    }
-
-    std::set<std::pair<int,int>> edges() const {
-      std::set<std::pair<int,int>> es;
-
-      for (auto t: terms_cov) {
-        auto v {t};
-        while (trace.at(v) != NONVERTEX) {
-          es.insert(std::make_pair(trace.at(v), v));
-          v = trace.at(v);
-        }
-      }
-
-      return es;
-    }
-  };
-
-  const std::map<std::pair<int,int>, double>* PartialTree::w = nullptr; 
 
 
   /**
@@ -238,10 +116,10 @@ namespace dst {
         int r,
         int v, 
         double d_rv, 
-        std::unordered_map<int,int> trace_r,
-        std::unordered_map<int, std::unordered_map<int,double>> dists_t,
-        std::unordered_map<int, std::unordered_map<int,int>> trace_t,
-        std::unordered_set<int> terms_left
+        const std::unordered_map<int,int> &trace_r,
+        const std::unordered_map<int, std::unordered_map<int,double>> &dists_t,
+        const std::unordered_map<int, std::unordered_map<int,int>> &trace_t,
+        const std::unordered_set<int> &terms_left
     ){
       // collect all t's for the current v
       std::vector<int> terms_left_v;
@@ -256,7 +134,7 @@ namespace dst {
 
       // sort distances from v to t's
       PartialTree tree {std::make_pair(r, v), d_rv, trace_r};
-      auto idxs = argsort(ds_vt);
+      auto &&idxs = argsort(ds_vt);
       for (size_t i=0; i < ds_vt.size(); i++) {
         auto idx = idxs[i];
         auto t = terms_left_v[idx];
@@ -264,7 +142,7 @@ namespace dst {
         if (i == 0 or den_i < tree.density()) {
           PartialTree tree_i {std::make_pair(v, t), 
                               ds_vt[idx],
-                              trace_t[t],
+                              trace_t.at(t),
                               true,
                               true};
           tree.append(tree_i);
@@ -280,21 +158,21 @@ namespace dst {
 
     PartialTree level2_rooted_at_r(
         int r,
-        std::unordered_set<int> V_cand,
-        std::unordered_set<int> terms_cand
+        std::unordered_set<int> V_cand, // TODO: a weird bug here
+        const std::unordered_set<int> &terms_cand
     ) {
       // dijktra from the root
-      auto p_r = dijkstra(adj, w, r);
-      auto dists_r = p_r.first;
-      auto trace_r = p_r.second;
+      auto &&p_r = dijkstra(adj, w, r);
+      auto dists_r = std::move(p_r.first);
+      auto trace_r = std::move(p_r.second);
 
       // dijktra from each terminal
       std::unordered_map<int, std::unordered_map<int,int>> trace_t;
       std::unordered_map<int, std::unordered_map<int,double>> dists_t;
       for (auto t: terms_cand) {
-        auto p_t = dijkstra(adj_r, w, t, true);
-        dists_t[t] = p_t.first;
-        trace_t[t] = p_t.second;
+        auto &&p_t = dijkstra(adj_r, w, t, true);
+        dists_t[t] = std::move(p_t.first);
+        trace_t[t] = std::move(p_t.second);
       }
 
       // iteratively add 2-level partial trees
@@ -308,12 +186,12 @@ namespace dst {
             continue;
           //fmt::println("level2_rooted_at_{} v: {}", r, v);
           double d_rv {dists_r.at(v)};
-          auto tree_v = level2_through_v(r, v, d_rv, trace_r, 
+          auto &&tree_v = level2_through_v(r, v, d_rv, trace_r, 
               dists_t, trace_t, terms_left);
 
           // keep the best across all v
           if (tree_v.density() < best.density())
-            best = tree_v;
+            best = std::move(tree_v);
         }
 
         // the rest terminals are not reachable
@@ -337,9 +215,9 @@ namespace dst {
 
     PartialTree level3_alg(const double alpha) {
       // dijktra from the root
-      auto p_r = dijkstra(adj, w, root);
-      auto dists_r = p_r.first;
-      auto trace_r = p_r.second;
+      auto &&p_r = dijkstra(adj, w, root);
+      auto dists_r = std::move(p_r.first);
+      auto trace_r = std::move(p_r.second);
       // sort vertices by their distances to the root
       std::vector<int> Lv;
       std::vector<double> Ld;
@@ -351,7 +229,7 @@ namespace dst {
         Lv.push_back(v);
         Ld.push_back(d_rv);
       }
-      auto idxs_r = argsort(Ld);
+      auto &&idxs_r = argsort(Ld);
       std::vector<int> Lv_sorted;
       std::vector<double> Ld_sorted;
       std::unordered_map<int,size_t> v2i;
@@ -370,13 +248,13 @@ namespace dst {
       while (terms_left.size() > 0) {
         //fmt::println("terms_left: {}", terms_left);
         // build a 2-level solution as upper bound
-        auto tree2 = level2_rooted_at_r(root, V, terms_left);
+        auto &&tree2 = level2_rooted_at_r(root, V, terms_left);
         if(tree2.terms_cov.size() == 0)
           break;
         double den2 = tree2.cost_sc / tree2.terms_cov.size();
 
         // enum all u as the single child of the root
-        PartialTree best {tree2}; // copy
+        PartialTree best = std::move(tree2);
         for (auto u: V) {
           // prune by d(r,u)
           if (not has_key(dists_r, u))
@@ -411,10 +289,10 @@ namespace dst {
 
           // add 2-level trees rooted at u 
           //fmt::println("V_: {}", V_);
-          PartialTree tree_u(std::make_pair(root, u), d_ru, trace_r);
+          PartialTree tree_u {std::make_pair(root, u), d_ru, trace_r};
           std::unordered_set<int> terms_left_u(terms_left.begin(), terms_left.end());
           while (terms_left_u.size() > 0) {
-            auto tree2_u = level2_rooted_at_r(u, V_, terms_left_u);
+            auto &&tree2_u = level2_rooted_at_r(u, V_, terms_left_u);
             if (tree2_u.terms_cov.size() == 0
                 or best.density() <= tree2_u.density())
               break;
@@ -456,9 +334,9 @@ namespace dst {
 
 
     double naive_alg() {
-      auto p_ = dijkstra(adj, w, root);
-      auto dists = p_.first;
-      auto trace = p_.second;
+      auto &&p_ = dijkstra(adj, w, root);
+      auto dists = std::move(p_.first);
+      auto trace = std::move(p_.second);
 
       // take the union of all paths from root to t's
       std::set<std::pair<int,int>> edges_marked;
