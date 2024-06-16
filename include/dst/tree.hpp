@@ -8,6 +8,7 @@
 #include <unordered_set>
 #include <unordered_map>
 
+#include <fmt/ranges.h>
 #include <dst/consts.hpp>
 #include <dst/utils.hpp>
 
@@ -79,9 +80,10 @@ namespace dst {
         //if (has_key(trace, p.first))
         //  assert (p.second == trace[p.first]);
 
-        // TODO: i think a bug here
         if (not has_key(trace, p.first))
           trace[p.first] = p.second;
+        else 
+          assert (p.second == NONVERTEX or p.second == trace[p.first]);
       }
     }
 
