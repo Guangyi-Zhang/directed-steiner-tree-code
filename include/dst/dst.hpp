@@ -158,7 +158,7 @@ namespace dst {
 
     PartialTree level2_rooted_at_r(
         int r,
-        std::unordered_set<int> V_cand, // TODO: a weird bug here
+        const std::unordered_set<int> &V_cand, 
         const std::unordered_set<int> &terms_cand
     ) {
       // dijktra from the root

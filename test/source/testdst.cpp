@@ -3,6 +3,7 @@
 #include "dst/dst.hpp"
 #include "dst/version.hpp"
 
+#include <iostream>
 #include <string>
 #include <map>
 #include <vector>
@@ -11,10 +12,13 @@
 #include <utility>
 #include <tuple>
 
-/*
-  TODO: 
-  - more than 1 subtrees
-*/
+
+TEST_CASE("PartialTree") {
+  using namespace dst;
+
+  //TODO
+}
+
 
 TEST_CASE("level3_alg") {
   using namespace dst;
@@ -47,7 +51,7 @@ TEST_CASE("level3_alg") {
                                          std::make_pair(11,22), 
                                          std::make_pair(12,23), 
                                          std::make_pair(12,24)};
-  std::vector<double> weights {2,2,4, 2,2,2,2, 1,1, 1,1,1,1};
+  std::vector<double> weights {2,2,4, 2,2,2,2, 1.5,1.5, 1,1,1,1};
   std::vector<int> terms {21,22,23,24};
   DST dt = DST(edges, weights, 0, terms);
 
@@ -60,8 +64,8 @@ TEST_CASE("level3_alg") {
   CHECK((tree2.terms_cov == std::unordered_set<int> {25,26,27,28}));
 
   auto tree3 = dt.level3_alg(0.99);
-  CHECK(tree3.cost == 4 + 2*1 + 4*1);
-  CHECK(tree3.cost_sc == 4 + 2*1 + 4*1);
+  CHECK(tree3.cost == 4 + 2*1.5 + 4*1);
+  CHECK(tree3.cost_sc == 4 + 2*1.5 + 4*1);
   CHECK((tree3.terms_cov == std::unordered_set<int> {25,26,27,28}));
 }
 
