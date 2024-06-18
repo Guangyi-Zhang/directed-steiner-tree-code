@@ -101,7 +101,7 @@ namespace dst {
       std::set<std::pair<int,int>> es;
 
       for (auto t: terms_cov) {
-        auto v {t};
+        int v {t};
         while (trace.at(v) != NONVERTEX) {
           es.insert(std::make_pair(trace.at(v), v));
           v = trace.at(v);

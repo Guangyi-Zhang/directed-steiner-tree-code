@@ -232,7 +232,7 @@ namespace dst {
       auto &&idxs_r = argsort(Ld);
       std::vector<int> Lv_sorted;
       std::vector<double> Ld_sorted;
-      std::unordered_map<int,size_t> v2i;
+      std::unordered_map<int,int> v2i;
       for (size_t i=0; i<idxs_r.size(); i++) {
         auto idx = idxs_r[i];
         Lv_sorted.push_back(Lv[idx]);
