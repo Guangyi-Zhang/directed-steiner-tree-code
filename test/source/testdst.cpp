@@ -20,6 +20,41 @@ TEST_CASE("PartialTree") {
 }
 
 
+TEST_CASE("crossing") {
+  using namespace dst;
+  /*
+    <---------+0+------->
+    |                   |
+    |                   |
+    v                   v
+    1+-------->11+----->2
+    +                  ++
+    |                  ||
+    v                  +v
+    21         22<-----+23
+  */
+
+  std::vector<std::pair<int,int>> edges {std::make_pair(0,1), 
+                                         std::make_pair(0,2), 
+                                         std::make_pair(1,11), 
+                                         std::make_pair(11,2),
+                                         std::make_pair(1,21), 
+                                         std::make_pair(2,22), 
+                                         std::make_pair(2,23)
+                                         };
+  std::vector<double> weights {1,1, 0.2,0.2, 3,3,1};
+  std::vector<int> terms {21,22,23};
+  DST dt = DST(edges, weights, 0, terms);
+
+  CHECK(dt.naive_alg() == 4+4+2-1);
+  auto tree = dt.level2_alg();
+  CHECK(tree.cost_sc == 2+(1+3+0.2*2+3));
+  CHECK(std::abs(tree.cost - tree.cost_sc) < EPSILON);
+  CHECK(std::abs(tree.cost_trimmed() - (tree.cost_sc-0.2*2)) < EPSILON);
+  CHECK((tree.terms_cov == std::unordered_set<int> {24,25,26}));
+}
+
+
 TEST_CASE("cycles") {
   using namespace dst;
 
@@ -27,8 +62,9 @@ TEST_CASE("cycles") {
                                          std::make_pair(1,2), 
                                          std::make_pair(2,3), 
                                          std::make_pair(3,4), 
-                                         std::make_pair(4,5)};
-  std::vector<double> weights {1,1,1,1,1};
+                                         std::make_pair(4,5),
+                                         std::make_pair(5,0)};
+  std::vector<double> weights {1,1,1,1,1,1};
   std::vector<int> terms {2,4};
   DST dt = DST(edges, weights, 0, terms);
 

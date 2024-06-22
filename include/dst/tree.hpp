@@ -77,19 +77,23 @@ namespace dst {
           trace_sc[p.first] = p.second;
       }
       for (auto &p: tree.trace) {
-        //if (has_key(trace, p.first))
-        //  assert (p.second == trace[p.first]);
-
         if (not has_key(trace, p.first))
           trace[p.first] = p.second;
-        else 
-          assert (p.second == NONVERTEX or p.second == trace[p.first]);
+        else {
+          if (p.second == NONVERTEX or p.second == trace[p.first]) {
+            // this is fine
+          } else {
+            // there exist cycles containing u->root->v or non-tree crosing,
+            // ok to shortcut but remember to prune disconnected dangling arcs w/o terminals
+            if (DEBUG) fmt::println("append: arc ({},{}) while arc ({},{}) in tree", p.second, p.first, trace[p.first], p.first);
+          }
+        }
       }
     }
 
     double density() const {
       if (terms_cov.size() == 0)
-        return std::numeric_limits<int>::max();
+        return std::numeric_limits<double>::max();
       return cost_sc / terms_cov.size();
     }
 
@@ -109,6 +113,16 @@ namespace dst {
       }
 
       return es;
+    }
+
+    double cost_trimmed() const {
+      // exclude dangling arcs
+      double sum {0};
+      auto &&es = edges();
+      for (const auto &e: es) {
+        sum += PartialTree::w->at(e);
+      }
+      return sum;
     }
   };
 
