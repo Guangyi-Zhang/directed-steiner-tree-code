@@ -177,6 +177,7 @@ namespace dst {
 
       // iteratively add 2-level partial trees
       PartialTree par {r};
+      int v_best_ {NONVERTEX};
       std::unordered_set<int> terms_left(terms_cand.begin(), terms_cand.end());
       while (terms_left.size() > 0) {
         // enum all v as the middle vertex in a 2-level tree
@@ -184,14 +185,18 @@ namespace dst {
         for (auto v: V_cand) {
           if (not has_key(dists_r, v) or r == v)
             continue;
-          //fmt::println("level2_rooted_at_{} v: {}", r, v);
           double d_rv {dists_r.at(v)};
           auto &&tree_v = level2_through_v(r, v, d_rv, trace_r, 
               dists_t, trace_t, terms_left);
 
           // keep the best across all v
-          if (tree_v.density() < best.density())
+          if (DEBUG) fmt::println("level2_rooted_at_{}: #terms_left={}, trying v={} and density={} and cov={}", r, terms_left.size(), v, tree_v.density(), tree_v.terms_cov);
+          if (tree_v.density() < best.density() or // breaking tie
+              (std::abs(tree_v.density() - best.density()) < EPSILON and 
+               tree_v.terms_cov.size() > best.terms_cov.size())) { //
             best = std::move(tree_v);
+            v_best_ = v;
+          }
         }
 
         // the rest terminals are not reachable
@@ -199,6 +204,7 @@ namespace dst {
           break;
 
         // merge the best 2-level partial tree
+        if (DEBUG) fmt::println("level2_rooted_at_{}: #terms_left={}, best v={} and density={} and cov={}", r, terms_left.size(), v_best_, best.density(), best.terms_cov);
         for (auto t: best.terms_cov)
           terms_left.erase(t);
         par.append(best);

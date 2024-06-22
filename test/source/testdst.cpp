@@ -20,6 +20,26 @@ TEST_CASE("PartialTree") {
 }
 
 
+TEST_CASE("cycles") {
+  using namespace dst;
+
+  std::vector<std::pair<int,int>> edges {std::make_pair(0,1), 
+                                         std::make_pair(1,2), 
+                                         std::make_pair(2,3), 
+                                         std::make_pair(3,4), 
+                                         std::make_pair(4,5)};
+  std::vector<double> weights {1,1,1,1,1};
+  std::vector<int> terms {2,4};
+  DST dt = DST(edges, weights, 0, terms);
+
+  CHECK(dt.naive_alg() == 2+2);
+  auto tree = dt.level2_alg();
+  CHECK(tree.cost == 2+2);
+  CHECK(tree.cost_sc == 2+4); // pick 2 and then 4
+  CHECK((tree.terms_cov == std::unordered_set<int> {6,7}));
+}
+
+
 TEST_CASE("level3_alg") {
   using namespace dst;
   /*
