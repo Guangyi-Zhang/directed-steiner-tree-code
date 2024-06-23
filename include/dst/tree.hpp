@@ -9,6 +9,7 @@
 #include <unordered_map>
 
 #include <fmt/ranges.h>
+//#include <boost/functional/hash.hpp>
 #include <dst/consts.hpp>
 #include <dst/utils.hpp>
 
@@ -17,7 +18,8 @@ namespace dst {
 
   class PartialTree {
   public:
-    static const std::map<std::pair<int,int>, double>* w; 
+    //static const std::unordered_map<std::pair<int,int>, double, boost::hash<std::pair<int,int>>>* w; 
+    static const std::unordered_map<std::pair<int,int>, double, pair_hash>* w; 
 
     int root;
     double cost {0}, cost_sc {0};
@@ -101,8 +103,10 @@ namespace dst {
       return terms_cov.size() == 0 ? true: false;
     }
 
-    std::set<std::pair<int,int>> edges() const {
-      std::set<std::pair<int,int>> es;
+    //std::unordered_set<std::pair<int,int>, boost::hash<std::pair<int,int>>> edges() const {
+    std::unordered_set<std::pair<int,int>, pair_hash> edges() const {
+      //std::unordered_set<std::pair<int,int>, boost::hash<std::pair<int,int>>> es;
+      std::unordered_set<std::pair<int,int>, pair_hash> es;
 
       for (auto t: terms_cov) {
         int v {t};
@@ -126,5 +130,6 @@ namespace dst {
     }
   };
 
-  const std::map<std::pair<int,int>, double>* PartialTree::w = nullptr; 
+  //const std::unordered_map<std::pair<int,int>, double, boost::hash<std::pair<int,int>>>* PartialTree::w = nullptr; 
+  const std::unordered_map<std::pair<int,int>, double, pair_hash>* PartialTree::w = nullptr; 
 }

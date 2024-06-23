@@ -15,6 +15,7 @@
 #include <tuple>
 
 #include <fmt/ranges.h>
+//#include <boost/functional/hash.hpp>
 #include <dst/consts.hpp>
 #include <dst/utils.hpp>
 #include <dst/tree.hpp>
@@ -23,8 +24,8 @@
 namespace dst {
 
   std::pair<std::unordered_map<int,double>, 
-            std::unordered_map<int,int>> dijkstra(const std::map<int, std::vector<int>> &adj, 
-                                                  const std::map<std::pair<int,int>, double> &edgeweight, 
+            std::unordered_map<int,int>> dijkstra(const std::unordered_map<int, std::vector<int>> &adj, 
+                                                  const std::unordered_map<std::pair<int,int>, double, pair_hash> &edgeweight, 
                                                   int source,
                                                   bool reverse=false) {
     std::unordered_map<int,double> distances;
@@ -71,10 +72,11 @@ namespace dst {
     int root;
     std::vector<int> terms;
     std::unordered_set<int> terms_dm;// dummy
-    std::map<int, int> terms_map;
-    std::map<std::pair<int,int>, double> w;
-    std::map<int, std::vector<int>> adj;
-    std::map<int, std::vector<int>> adj_r; // reverse adj
+    std::unordered_map<int, int> terms_map;
+    //std::unordered_map<std::pair<int,int>, double, boost::hash<std::pair<int,int>>> w;
+    std::unordered_map<std::pair<int,int>, double, pair_hash> w;
+    std::unordered_map<int, std::vector<int>> adj;
+    std::unordered_map<int, std::vector<int>> adj_r; // reverse adj
     std::unordered_set<int> V; // excluding dummy terminals
 
     DST(  std::vector<std::pair<int,int>> edges, 
@@ -345,7 +347,8 @@ namespace dst {
       auto trace = std::move(p_.second);
 
       // take the union of all paths from root to t's
-      std::set<std::pair<int,int>> edges_marked;
+      //std::unordered_set<std::pair<int,int>, boost::hash<std::pair<int,int>>> edges_marked;
+      std::unordered_set<std::pair<int,int>, pair_hash> edges_marked;
       for (auto t: terms_dm) {
         if (not has_key(trace, t))
             continue; // disconnected graph
