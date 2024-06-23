@@ -39,11 +39,11 @@ auto main(int argc, char** argv) -> int {
   std::string version {"v1"}; // @20240616: testing
   int rep {1};
 
-  std::string method {"naive"};
-  //3std::string method {"level2"};
+  //std::string method {"naive"};
+  std::string method {"level2"};
 
   double alpha = 0.5;
-  std::string dataset {"random_graph_250.csv"};
+  std::string dataset {"random_graph_5000.csv"};
 
   // load data
   std::vector<std::pair<int,int>> edges;
@@ -76,6 +76,8 @@ auto main(int argc, char** argv) -> int {
 
   int root {0};
   std::vector<int> terms;
+  if (dataset.compare("random_graph_10000.csv") == 0)
+    terms = {7270, 860, 5390, 5191, 5734, 6265, 466, 4426, 5578, 8322};
   if (dataset.compare("random_graph_5000.csv") == 0)
     terms = {860, 3772, 3092, 466, 4426, 3444, 3171, 2919, 130, 1685};
   if (dataset.compare("random_graph_1000.csv") == 0)
