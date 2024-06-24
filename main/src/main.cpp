@@ -42,7 +42,7 @@ auto main(int argc, char** argv) -> int {
   std::string method {"level2"};
 
   double alpha = 0.5;
-  std::string dataset {"random_graph_500.csv"};
+  std::string dataset {"random_graph_5000.csv"};
 
   // load data
   std::vector<std::pair<int,int>> edges;

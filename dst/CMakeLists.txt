@@ -17,14 +17,6 @@ CPMAddPackage(
   OPTIONS "FMT_INSTALL YES" # create an installable target
 )
 
-#CPMAddPackage(
-#  NAME Boost
-#  VERSION 1.84.0
-#  URL https://github.com/boostorg/boost/releases/download/boost-1.84.0/boost-1.84.0.tar.xz
-#  #URL https://github.com/boostorg/boost/releases/download/boost-1.85.0/boost-1.85.0-cmake.tar.xz
-#  OPTIONS "BOOST_ENABLE_CMAKE ON" "BOOST_INCLUDE_LIBRARIES functional" # \\\;asio" # Note the escapes!
-#)
-
 # ---- Add source files ----
 
 # Note: globbing sources is considered bad practice as CMake's generators may not detect new files
@@ -46,14 +38,15 @@ target_compile_options(${PROJECT_NAME} PUBLIC "$<$<COMPILE_LANG_AND_ID:CXX,MSVC>
 
 # Link dependencies
 # target_link_libraries(${PROJECT_NAME} PRIVATE fmt::fmt profiler)
-# target_link_libraries(${PROJECT_NAME} PRIVATE fmt::fmt Boost::functional)
 target_link_libraries(${PROJECT_NAME} PRIVATE fmt::fmt)
 
+find_package(Boost) # container_hash is header-only
+if(Boost_FOUND)
+    target_include_directories(${PROJECT_NAME} PUBLIC ${Boost_INCLUDE_DIRS})
+endif()
 target_include_directories(
   ${PROJECT_NAME} PUBLIC $<BUILD_INTERFACE:${PROJECT_SOURCE_DIR}/include>
                          $<INSTALL_INTERFACE:include/${PROJECT_NAME}-${PROJECT_VERSION}>
-                         #${boost_system_SOURCE_DIR}/include
-                         #$<BUILD_INTERFACE:${Boost_SOURCE_DIR}/libs/functional/include>
 )
 
 
