@@ -34,6 +34,16 @@ auto main(int argc, char** argv) -> int {
     std::cout << "Log init failed: " << ex.what() << std::endl;
   }
 
+  // read parameters
+  cxxopts::Options options(*argv, "DST");
+  std::string buildtype;
+
+  options.add_options()
+    ("h,help", "Show help")
+    ("b,buildtype", "CMAKE_BUILD_TYPE", cxxopts::value(buildtype)->default_value("unknown"))
+  ;
+  auto opresult = options.parse(argc, argv);
+
   // parameters
   std::string version {"v1"}; // @20240616: testing
   int rep {1};
@@ -126,6 +136,7 @@ auto main(int argc, char** argv) -> int {
 
   d.SetObject();
   d.AddMember("version", rapidjson::Value(rapidjson::StringRef(version.c_str())), a); 
+  d.AddMember("buildtype", rapidjson::Value(rapidjson::StringRef(opresult["buildtype"].as<std::string>().c_str())), a); 
   d.AddMember("method", rapidjson::Value(rapidjson::StringRef(method.c_str())), a); 
   d.AddMember("rep", rapidjson::Value(rep), a); 
   d.AddMember("dataset", rapidjson::Value(rapidjson::StringRef(dataset.c_str())), a); 
