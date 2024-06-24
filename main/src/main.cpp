@@ -5,7 +5,6 @@
 #include "spdlog/spdlog.h"
 #include "spdlog/sinks/basic_file_sink.h"
 #include "dst/dst.hpp"
-#include "dst/version.hpp"
 
 #include <cxxopts.hpp>
 #include <cassert>
@@ -43,7 +42,7 @@ auto main(int argc, char** argv) -> int {
   std::string method {"level2"};
 
   double alpha = 0.5;
-  std::string dataset {"random_graph_5000.csv"};
+  std::string dataset {"random_graph_500.csv"};
 
   // load data
   std::vector<std::pair<int,int>> edges;

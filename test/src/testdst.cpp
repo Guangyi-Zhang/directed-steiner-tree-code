@@ -1,7 +1,6 @@
 #include <doctest/doctest.h>
 #include <fmt/ranges.h>
 #include "dst/dst.hpp"
-#include "dst/version.hpp"
 
 #include <iostream>
 #include <string>
