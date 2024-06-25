@@ -42,7 +42,7 @@ namespace dst {
 
       trace[arc.first] = NONVERTEX;
       trace_sc[arc.first] = NONVERTEX;
-      trace[arc.second] = arc.first;
+      //trace[arc.second] = arc.first;
       trace_sc[arc.second] = arc.first;
 
       cost_sc += w_arc;
@@ -53,6 +53,40 @@ namespace dst {
                           std::make_pair(trace_arc.at(v), v);
         cost += PartialTree::w->at(e);
         trace[e.second] = e.first;
+        v = trace_arc.at(v);
+      }
+    }
+
+    void add_arc(std::pair<int,int> arc, double w_arc, 
+        const std::unordered_map<int,int> &trace_arc, 
+        bool reverse=false,
+        bool is_terminal=false) {
+      // start from PartialTree(root), arcs must be added from top-down
+      // i.e., arc.first must exist already beforehand
+      if (is_terminal)
+        terms_cov.insert(arc.second);
+
+      trace_sc[arc.second] = arc.first;
+      cost_sc += w_arc;
+
+      auto v = reverse? arc.first: arc.second;
+      while (trace_arc.at(v) != NONVERTEX) {
+        auto e = reverse? std::make_pair(v, trace_arc.at(v)) : 
+                          std::make_pair(trace_arc.at(v), v);
+        if (not has_key(trace, e.second)) {
+          cost += PartialTree::w->at(e);
+          trace[e.second] = e.first;
+        }
+        else if (reverse) {
+          ; // need to prune disconnected dangling branches later
+        }
+        else {
+          // this is fine to have
+          // e.first == NONVERTEX or e.first == trace[e.second].
+          // there exist cycles containing u->root->v or non-tree crosing,
+          // ok to shortcut 
+          break;
+        }
         v = trace_arc.at(v);
       }
     }

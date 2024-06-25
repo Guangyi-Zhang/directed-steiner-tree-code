@@ -1,25 +1,30 @@
 #pragma once
 
+#include <cmath>
 #include <numeric> // std::iota
 #include <algorithm>
 #include <iterator> // inserter
 #include <vector>
 #include <functional> // std::hash
 
+#include <dst/consts.hpp>
+
 
 namespace dst {
-  struct pair_hash {
-    template <class T1, class T2>
-    std::size_t operator () (const std::pair<T1,T2> &p) const {
-      auto h1 = std::hash<T1>{}(p.first);
-      auto h2 = std::hash<T2>{}(p.second);
 
-      // Mainly for demonstration purposes, i.e. works but is overly simple
-      // In the real world, use sth. like boost.hash_combine
-      return h1 ^ h2;  
-    }
-  };
-  
+  bool eq(double a, double b) {
+    return std::abs(a-b) < EPSILON;
+  }
+
+  bool lq(double a, double b) {
+    if (std::abs(a-b) < EPSILON)
+      return false;
+    return a < b;
+  }
+
+  bool leq(double a, double b) {
+    return a<b or std::abs(a-b) < EPSILON;
+  }
 
   template <typename T, typename U>
   bool has_key(const T& container, const U& key) {

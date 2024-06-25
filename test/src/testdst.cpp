@@ -1,6 +1,7 @@
 #include <doctest/doctest.h>
 #include <fmt/ranges.h>
 #include "dst/dst.hpp"
+#include "dst/utils.hpp"
 
 #include <iostream>
 #include <string>
@@ -12,10 +13,41 @@
 #include <tuple>
 
 
-TEST_CASE("PartialTree") {
+TEST_CASE("Level2PartialTree") {
   using namespace dst;
 
-  //TODO
+  int root {0}, v {1};
+  double d_rv {1};
+  int k = 5;
+  Level2PartialTree tree {root, v, d_rv};
+  CHECK(not tree.is_ready());
+  CHECK(tree.density() > 1e8);
+  CHECK(tree.density_LB(k) < 0);
+
+  tree.add_term(11, 1); // density = 2/1
+  CHECK(eq(tree.density_LB(k), (1.0+k)/k));
+  tree.add_term(12, 2); // density = 4/2
+  CHECK(not tree.is_ready());
+  CHECK(eq(tree.density_LB(k), (1.0+1+(k-1)*2)/k));
+  tree.add_term(13, 3); // density = 7/3
+  CHECK(tree.is_ready());
+  CHECK(eq(tree.density(), 2));
+  CHECK(eq(tree.density_LB(k), tree.density()));
+  CHECK(tree.terms.size() == 2);
+
+  tree.erase_and_reset({11, 12});
+  CHECK(not tree.is_ready());
+  CHECK(eq(tree.density(), 1+3));
+  CHECK(eq(tree.density_LB(k), (1.0+k*3)/k));
+  CHECK(tree.terms.size() == 1);
+
+  tree.add_term(14, 4); // density = (1+3+4)/2
+  CHECK(eq(tree.density_LB(k), (1.0+3+(k-1)*4)/k));
+  tree.add_term(14, 5); // density = (1+3+4+5)/3
+  CHECK(tree.is_ready());
+  CHECK(eq(tree.density(), 4));
+  CHECK(eq(tree.density_LB(k), tree.density()));
+  CHECK(tree.terms.size() == 2);
 }
 
 
