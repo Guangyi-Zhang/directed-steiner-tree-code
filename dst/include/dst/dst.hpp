@@ -33,7 +33,6 @@ namespace dst {
     std::priority_queue<std::tuple<double,int,int>, 
                         std::vector<std::tuple<double,int,int>>, 
                         std::greater<std::tuple<double,int,int>>> pq;
-    distances[source] = 0;
     pq.emplace(0, NONVERTEX, source);
 
     while (!pq.empty()) {
@@ -45,16 +44,13 @@ namespace dst {
       if (has_key(distances, u) and d_u > distances.at(u)) 
         continue;
 
+      distances[u] = d_u;
       trace[u] = u_prev;
       if (not has_key(adj, u))
         continue;
       for (const auto& v: adj.at(u)) {
-          double weight = reverse? edgeweight.at({v,u}) : edgeweight.at({u,v});
-
-          if (not has_key(distances, v) or distances.at(v) > distances.at(u) + weight) {
-              distances[v] = distances.at(u) + weight;
-              pq.emplace(distances.at(v), u, v);
-          }
+        double weight = reverse? edgeweight.at({v,u}) : edgeweight.at({u,v});
+        pq.emplace(distances.at(u) + weight, u, v);
       }
     }
 

@@ -138,14 +138,14 @@ TEST_CASE("level2_alg") {
                                          std::make_pair(4,11), 
                                          std::make_pair(4,12), 
                                          std::make_pair(4,13)};
-  std::vector<double> weights {1,1,1,2, 2,2,2, 1,1,1};
+  std::vector<double> weights {1,1,1,2.5, 2,2,2, 1,1,1};
   std::vector<int> terms {11,12,13};
   DST dt = DST(edges, weights, 0, terms);
 
   CHECK(dt.naive_alg() == 1*3 + 2*3);
   auto tree = dt.level2_alg();
-  CHECK(tree.cost == 2 + 1*3);
-  CHECK(tree.cost_sc == 2 + 1*3);
+  CHECK(tree.cost == 2.5 + 1*3);
+  CHECK(tree.cost_sc == 2.5 + 1*3);
   CHECK((tree.terms_cov == std::unordered_set<int> {14,15,16}));
 }
 
