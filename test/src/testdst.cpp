@@ -1,6 +1,7 @@
 #include <doctest/doctest.h>
 #include <fmt/ranges.h>
 #include "dst/dst.hpp"
+#include "dst/dijkstra.hpp"
 #include "dst/utils.hpp"
 
 #include <iostream>
@@ -200,6 +201,57 @@ TEST_CASE("DST") {
   
   double cost = dt.naive_alg();
   CHECK(cost == 1+1+2-1);
+}
+
+
+TEST_CASE("CoordinatedDijkstra") {
+  using namespace dst;
+  /*
+    <-----+0+---->
+    |            |
+    v            v
+    1            2+-------->
+    +            +         |
+    |            |         |
+    v            v         v
+    11+--------->12        13
+  */
+
+  std::vector<std::pair<int,int>> edges {std::make_pair(0,1), 
+                                         std::make_pair(0,2), 
+                                         std::make_pair(1,11), 
+                                         std::make_pair(2,12), 
+                                         std::make_pair(2,13), 
+                                         std::make_pair(11,12)};
+  std::vector<double> weights {1,1, 2,4,2.5, 1};
+  std::vector<int> terms {11,12,13};
+  DST dt = DST(edges, weights, 0, terms);
+
+  std::unordered_set<int> sources {terms.begin(), terms.end()};
+  CoordinatedDijkstra cosssp {dt.adj_r, dt.w, sources, true};
+  int source, u; 
+  double d_u;
+  std::tie(source, u, d_u) = cosssp.next();
+  while(eq(d_u, 0))
+    std::tie(source, u, d_u) = cosssp.next();
+
+  CHECK ((source == 12 and u == 11 and eq(d_u,1)));
+
+  std::tie(source, u, d_u) = cosssp.next();
+  CHECK ((source == 11 and u == 1 and eq(d_u,2)));
+
+  std::tie(source, u, d_u) = cosssp.next();
+  CHECK ((source == 13 and u == 2 and eq(d_u,2.5)));
+
+  cosssp.skip_source(11);
+  std::tie(source, u, d_u) = cosssp.next();
+  CHECK ((source == 12 and u == 1 and eq(d_u,3)));
+
+  std::tie(source, u, d_u) = cosssp.next();
+  CHECK ((source == 13 and u == 0 and eq(d_u,3.5)));
+
+  std::tie(source, u, d_u) = cosssp.next();
+  CHECK ((source == 12 and u == 0 and eq(d_u,4)));
 }
 
 

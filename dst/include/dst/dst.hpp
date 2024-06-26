@@ -20,45 +20,10 @@
 #include <dst/consts.hpp>
 #include <dst/utils.hpp>
 #include <dst/tree.hpp>
-//#include <dst/dijkstra.hpp>
+#include <dst/dijkstra.hpp>
 
 
 namespace dst {
-
-  std::pair<std::unordered_map<int,double>, 
-            std::unordered_map<int,int>> dijkstra(const std::unordered_map<int, std::vector<int>> &adj, 
-                                                  const std::unordered_map<std::pair<int,int>, double, boost::hash<std::pair<int,int>>> &edgeweight, 
-                                                  int source,
-                                                  bool reverse=false) {
-    std::unordered_map<int,double> distances;
-    std::unordered_map<int,int> trace;
-    std::priority_queue<std::tuple<double,int,int>, 
-                        std::vector<std::tuple<double,int,int>>, 
-                        std::greater<std::tuple<double,int,int>>> pq;
-    pq.emplace(0, NONVERTEX, source);
-
-    while (!pq.empty()) {
-      double d_u;
-      int u_prev, u; 
-      std::tie(d_u, u_prev, u) = pq.top();
-      pq.pop();
-
-      if (has_key(distances, u) and d_u > distances.at(u)) 
-        continue;
-
-      distances[u] = d_u;
-      trace[u] = u_prev;
-      if (not has_key(adj, u))
-        continue;
-      for (const auto& v: adj.at(u)) {
-        double weight = reverse? edgeweight.at({v,u}) : edgeweight.at({u,v});
-        pq.emplace(distances.at(u) + weight, u, v);
-      }
-    }
-
-    return std::make_pair(distances, trace);
-  }
-
 
   class Level2PartialTree {
     public:
