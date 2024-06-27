@@ -324,7 +324,7 @@ namespace dst {
         add_greedy(tree_best);
       }
 
-      int sssp_nodes_visited = 0;
+      int sssp_nodes_visited = dists_r.size();
       for (auto &p: cosssp.distances_t) {
         sssp_nodes_visited += p.second.size();
       }
@@ -392,7 +392,7 @@ namespace dst {
         par.append(best);
       }
 
-      int sssp_nodes_visited = 0;
+      int sssp_nodes_visited = dists_r.size();
       for (auto &p: dists_t) {
         sssp_nodes_visited += p.second.size();
       }
@@ -528,7 +528,7 @@ namespace dst {
 
 
     PartialTree naive_alg() {
-      auto &&p_ = dijkstra(adj, w, root);
+      auto &&p_ = dijkstra(adj, w, root, false, terms_dm);
       auto dists = std::move(p_.first);
       auto trace = std::move(p_.second);
 

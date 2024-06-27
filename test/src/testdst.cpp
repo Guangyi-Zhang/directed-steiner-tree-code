@@ -272,14 +272,14 @@ TEST_CASE("dijkstra") {
   using namespace dst;
 
   /*
-    +----0----+
+    <---+0+--->
+    |    +    |
     |    |    |
-    |    |    |
-    |    |    |
-    1----2    3
+    v    v    v
+    1+-->2    3
+              +
               |
-              |
-              |
+              +
               4
   */
   std::vector<std::pair<int,int>> edges {std::make_pair(0,1), 
@@ -322,6 +322,9 @@ TEST_CASE("dijkstra") {
   CHECK (trace.at(4) == NONVERTEX);
   CHECK (trace.at(3) == 4);
   CHECK (trace.find(2) == trace.end());
+
+  auto p4 = dijkstra(dt.adj, dt.w, 0, false, {3});
+  CHECK (not has_key(p4.first, 4));
 }
 
 

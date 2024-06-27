@@ -17,13 +17,15 @@ namespace dst {
             std::unordered_map<int,int>> dijkstra(const std::unordered_map<int, std::vector<int>> &adj, 
                                                   const std::unordered_map<std::pair<int,int>, double, boost::hash<std::pair<int,int>>> &edgeweight, 
                                                   int source,
-                                                  bool reverse=false) {
+                                                  bool reverse=false,
+                                                  const std::unordered_set<int> &to_reach=std::unordered_set<int> {}) {
     std::unordered_map<int,double> distances;
     std::unordered_map<int,int> trace;
     std::priority_queue<std::tuple<double,int,int>, 
                         std::vector<std::tuple<double,int,int>>, 
                         std::greater<std::tuple<double,int,int>>> pq;
     pq.emplace(0, NONVERTEX, source);
+    size_t n_reached = 0;
 
     while (!pq.empty()) {
       double d_u;
@@ -36,6 +38,12 @@ namespace dst {
 
       distances[u] = d_u;
       trace[u] = u_prev;
+      if (to_reach.size() > 0 and has_key(to_reach, u)) {
+        n_reached++;
+        if (to_reach.size() == n_reached)
+          break;
+      }
+
       if (not has_key(adj, u))
         continue;
       for (const auto& v: adj.at(u)) {
