@@ -45,14 +45,16 @@ auto main(int argc, char** argv) -> int {
   auto opresult = options.parse(argc, argv);
 
   // parameters
-  std::string version {"v1"}; // @20240616: testing
+  // std::string version {"v1"}; // @20240616: testing
+  std::string version {"v2"}; // @20240624: start making level2 faster
   int rep {1};
 
   //std::string method {"naive"};
-  std::string method {"level2"};
+  //std::string method {"level2"};
+  std::string method {"level2co"};
 
   double alpha = 0.5;
-  std::string dataset {"random_graph_5000.csv"};
+  std::string dataset {"random_graph_10000.csv"};
 
   // load data
   std::vector<std::pair<int,int>> edges;
@@ -102,7 +104,7 @@ auto main(int argc, char** argv) -> int {
   /* START RUNNING */
   std::clock_t c_start = std::clock();
 
-  DST dt = DST(edges, weights, 0, terms);
+  DST dt = DST(edges, weights, root, terms);
 
   double cost {-1}, cost_sc{-1};
   int n_cov {-1};
@@ -110,13 +112,19 @@ auto main(int argc, char** argv) -> int {
     cost = dt.naive_alg();
   }
   else if (method.compare("level2") == 0) {
-    auto tree2 = dt.level2_alg();
+    auto &&tree2 = dt.level2_alg();
+    cost = tree2.cost;
+    cost_sc = tree2.cost_sc;
+    n_cov = tree2.terms_cov.size();
+  }
+  else if (method.compare("level2co") == 0) {
+    auto &&tree2 = dt.level2_co_alg();
     cost = tree2.cost;
     cost_sc = tree2.cost_sc;
     n_cov = tree2.terms_cov.size();
   }
   else if (method.compare("level3") == 0) {
-    auto tree3 = dt.level3_alg(alpha);
+    auto &&tree3 = dt.level3_alg(alpha);
     cost = tree3.cost;
     cost_sc = tree3.cost_sc;
     n_cov = tree3.terms_cov.size();

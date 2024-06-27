@@ -205,23 +205,17 @@ namespace dst {
       }
 
       // sort distances from v to t's
-      PartialTree tree {std::make_pair(r, v), d_rv, trace_r};
+      PartialTree tree {r};
+      tree.add_arc(std::make_pair(r, v), d_rv, trace_r);
       auto &&idxs = argsort(ds_vt);
       for (size_t i=0; i < ds_vt.size(); i++) {
         auto idx = idxs[i];
         auto t = terms_left_v[idx];
         double den_i = (tree.cost_sc + ds_vt[idx]) / (i+1);
-        if (i == 0 or den_i < tree.density()) {
-          PartialTree tree_i {std::make_pair(v, t), 
-                              ds_vt[idx],
-                              trace_t.at(t),
-                              true,
-                              true};
-          tree.append(tree_i);
-        }
-        else {
+        if (i == 0 or den_i < tree.density())
+          tree.add_arc(std::make_pair(v, t), ds_vt[idx], trace_t.at(t), true, true);
+        else 
           break; // stop once adding a t increases den_v
-        }
       }
 
       return tree;
@@ -294,8 +288,8 @@ namespace dst {
           v_best = v;
         auto &tree_best_old = trees.at(v_best);
         if(tree_v.density() < tree_best_old.density() or
-           eq(tree_v.density(), tree_best_old.density()) and // break ties
-           tree_v.terms.size() > tree_best_old.terms.size()) {
+           (eq(tree_v.density(), tree_best_old.density()) and // break ties
+            tree_v.terms.size() > tree_best_old.terms.size())) {
           v_best = v;
 
           Level2PartialTree tmp {tree_v.density()}; // a fake tree
@@ -323,6 +317,7 @@ namespace dst {
           // 2. v_best has reached all remaining terminals
           // 3. some terminals are not reachable
           // 4. v_best need not wait with large d_vt as a LB
+          // 5. TODO: bi-direction SSSP
           continue;
         if (tree_best.terms.size() == 0) // the rest terminals not reachable
           break;
@@ -477,7 +472,8 @@ namespace dst {
 
           // add 2-level trees rooted at u 
           //fmt::println("V_: {}", V_);
-          PartialTree tree_u {std::make_pair(root, u), d_ru, trace_r};
+          PartialTree tree_u {root};
+          tree_u.add_arc(std::make_pair(root, u), d_ru, trace_r);
           std::unordered_set<int> terms_left_u(terms_left.begin(), terms_left.end());
           while (terms_left_u.size() > 0) {
             auto &&tree2_u = level2_rooted_at_r(u, V_, terms_left_u);

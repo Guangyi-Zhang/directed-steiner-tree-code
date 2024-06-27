@@ -32,31 +32,6 @@ namespace dst {
       trace_sc[root] = NONVERTEX;
     }
 
-    PartialTree(std::pair<int,int> arc, double w_arc, 
-        const std::unordered_map<int,int> &trace_arc, 
-        bool reverse=false,
-        bool is_terminal=false) : 
-        root {arc.first} {
-      if (is_terminal)
-        terms_cov.insert(arc.second);
-
-      trace[arc.first] = NONVERTEX;
-      trace_sc[arc.first] = NONVERTEX;
-      //trace[arc.second] = arc.first;
-      trace_sc[arc.second] = arc.first;
-
-      cost_sc += w_arc;
-
-      auto v = reverse? arc.first: arc.second;
-      while (trace_arc.at(v) != NONVERTEX) {
-        auto e = reverse? std::make_pair(v, trace_arc.at(v)) : 
-                          std::make_pair(trace_arc.at(v), v);
-        cost += PartialTree::w->at(e);
-        trace[e.second] = e.first;
-        v = trace_arc.at(v);
-      }
-    }
-
     void add_arc(std::pair<int,int> arc, double w_arc, 
         const std::unordered_map<int,int> &trace_arc, 
         bool reverse=false,
