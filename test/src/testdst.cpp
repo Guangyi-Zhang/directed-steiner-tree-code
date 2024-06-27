@@ -81,7 +81,8 @@ TEST_CASE("crossing") {
   std::vector<int> terms {21,22,23};
   DST dt = DST(edges, weights, 0, terms);
 
-  CHECK(dt.naive_alg() == 4+4+2-1);
+  CHECK(dt.naive_alg().cost == 4+4+2-1);
+  CHECK(dt.naive_alg().cost_sc == 4+4+2);
   auto tree = dt.level2_alg();
   CHECK(tree.cost_sc == 2+(1+3+0.2*2+3));
   CHECK(std::abs(tree.cost - tree.cost_sc) < EPSILON);
@@ -103,7 +104,8 @@ TEST_CASE("cycles") {
   std::vector<int> terms {2,4};
   DST dt = DST(edges, weights, 0, terms);
 
-  CHECK(dt.naive_alg() == 2+2);
+  CHECK(dt.naive_alg().cost_sc == 2+4);
+  CHECK(dt.naive_alg().cost == 2+2);
   auto tree = dt.level2_alg();
   CHECK(tree.cost == 2+2);
   CHECK(tree.cost_sc == 2+4); // pick 2 and then 4
@@ -146,15 +148,16 @@ TEST_CASE("level3_alg") {
   std::vector<int> terms {21,22,23,24};
   DST dt = DST(edges, weights, 0, terms);
 
-  double cost = dt.naive_alg();
-  CHECK(cost == (2 + 2*2) * 2);
+  auto &&tree_naive = dt.naive_alg();
+  CHECK(tree_naive.cost_sc == (2+2) * 4);
+  CHECK(tree_naive.cost == (2 + 2*2) * 2);
 
-  auto tree2 = dt.level2_alg();
+  auto &&tree2 = dt.level2_alg();
   CHECK(tree2.cost == (2 + 2*2) * 2);
   CHECK(tree2.cost_sc == (2 + 2*2) * 2);
   CHECK((tree2.terms_cov == std::unordered_set<int> {25,26,27,28}));
 
-  auto tree3 = dt.level3_alg(0.99);
+  auto &&tree3 = dt.level3_alg(0.99);
   CHECK(tree3.cost == 4 + 2*1.5 + 4*1);
   CHECK(tree3.cost_sc == 4 + 2*1.5 + 4*1);
   CHECK((tree3.terms_cov == std::unordered_set<int> {25,26,27,28}));
@@ -178,7 +181,8 @@ TEST_CASE("level2_alg") {
   std::vector<int> terms {11,12,13};
   DST dt = DST(edges, weights, 0, terms);
 
-  CHECK(dt.naive_alg() == 1*3 + 2*3);
+  CHECK(dt.naive_alg().cost == 1*3 + 2*3);
+  CHECK(dt.naive_alg().cost_sc == 1*3 + 2*3);
 
   auto tree = dt.level2_alg();
   CHECK(tree.cost == 2.5 + 1*3);
@@ -208,8 +212,8 @@ TEST_CASE("DST") {
 
   CHECK(dt.terms_dm == (std::unordered_set<int> {6,7,8}));
   
-  double cost = dt.naive_alg();
-  CHECK(cost == 1+1+2-1);
+  CHECK(dt.naive_alg().cost == 1+1+2-1);
+  CHECK(dt.naive_alg().cost_sc == 1+1+2);
 }
 
 

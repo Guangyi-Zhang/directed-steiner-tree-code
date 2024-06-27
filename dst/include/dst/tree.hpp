@@ -26,6 +26,8 @@ namespace dst {
     std::unordered_map<int,int> trace;
     std::unordered_set<int> terms_cov;
 
+    std::unordered_map<std::string, std::string> debuginfo;
+
     PartialTree(int root) : 
         root {root} {
       trace[root] = NONVERTEX;

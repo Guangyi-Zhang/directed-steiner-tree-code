@@ -324,6 +324,11 @@ namespace dst {
         add_greedy(tree_best);
       }
 
+      int sssp_nodes_visited = 0;
+      for (auto &p: cosssp.distances_t) {
+        sssp_nodes_visited += p.second.size();
+      }
+      par.debuginfo["sssp_nodes_visited"] = std::to_string(sssp_nodes_visited);
       return par;
     }
 
@@ -387,6 +392,11 @@ namespace dst {
         par.append(best);
       }
 
+      int sssp_nodes_visited = 0;
+      for (auto &p: dists_t) {
+        sssp_nodes_visited += p.second.size();
+      }
+      par.debuginfo["sssp_nodes_visited"] = std::to_string(sssp_nodes_visited);
       return par;
     }
 
@@ -517,28 +527,22 @@ namespace dst {
     }
 
 
-    double naive_alg() {
+    PartialTree naive_alg() {
       auto &&p_ = dijkstra(adj, w, root);
       auto dists = std::move(p_.first);
       auto trace = std::move(p_.second);
 
       // take the union of all paths from root to t's
-      std::unordered_set<std::pair<int,int>, boost::hash<std::pair<int,int>>> edges_marked;
+      PartialTree tree {root};
       for (auto t: terms_dm) {
         if (not has_key(trace, t))
             continue; // disconnected graph
 
-        int v {t};
-        while (trace.at(v) != NONVERTEX) {
-          edges_marked.insert({trace.at(v), v});
-          v = trace.at(v);
-        }
+        tree.add_arc(std::make_pair(root, t), dists[t], trace, false, true);
       }
 
-      double total {0};
-      for (auto e: edges_marked)
-        total = total + w.at({e.first, e.second});
-      return total;
+      tree.debuginfo["sssp_nodes_visited"] = std::to_string(dists.size());
+      return tree;
     }
 
   };

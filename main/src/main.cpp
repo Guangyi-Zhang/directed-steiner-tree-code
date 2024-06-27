@@ -49,12 +49,12 @@ auto main(int argc, char** argv) -> int {
   std::string version {"v2"}; // @20240624: start making level2 faster
   int rep {1};
 
-  //std::string method {"naive"};
+  std::string method {"naive"};
   //std::string method {"level2"};
-  std::string method {"level2co"};
+  //std::string method {"level2co"};
 
   double alpha = 0.5;
-  std::string dataset {"random_graph_10000.csv"};
+  std::string dataset {"random_graph_5000.csv"};
 
   // load data
   std::vector<std::pair<int,int>> edges;
@@ -106,28 +106,22 @@ auto main(int argc, char** argv) -> int {
 
   DST dt = DST(edges, weights, root, terms);
 
-  double cost {-1}, cost_sc{-1};
-  int n_cov {-1};
+  PartialTree tree {0};
   if (method.compare("naive") == 0) {
-    cost = dt.naive_alg();
+    auto &&tree_naive = dt.naive_alg();
+    tree = std::move(tree_naive);
   }
   else if (method.compare("level2") == 0) {
     auto &&tree2 = dt.level2_alg();
-    cost = tree2.cost;
-    cost_sc = tree2.cost_sc;
-    n_cov = tree2.terms_cov.size();
+    tree = std::move(tree2);
   }
   else if (method.compare("level2co") == 0) {
     auto &&tree2 = dt.level2_co_alg();
-    cost = tree2.cost;
-    cost_sc = tree2.cost_sc;
-    n_cov = tree2.terms_cov.size();
+    tree = std::move(tree2);
   }
   else if (method.compare("level3") == 0) {
     auto &&tree3 = dt.level3_alg(alpha);
-    cost = tree3.cost;
-    cost_sc = tree3.cost_sc;
-    n_cov = tree3.terms_cov.size();
+    tree = std::move(tree3);
   }
   else {
     std::cerr << "unknown method: " << method << std::endl;
@@ -149,10 +143,11 @@ auto main(int argc, char** argv) -> int {
   d.AddMember("rep", rapidjson::Value(rep), a); 
   d.AddMember("dataset", rapidjson::Value(rapidjson::StringRef(dataset.c_str())), a); 
   d.AddMember("alpha", rapidjson::Value(alpha), a); 
-  d.AddMember("cost", rapidjson::Value(cost), a); 
-  d.AddMember("cost_sc", rapidjson::Value(cost_sc), a); 
-  d.AddMember("n_cov", rapidjson::Value(n_cov), a); 
+  d.AddMember("cost", rapidjson::Value(tree.cost), a); 
+  d.AddMember("cost_sc", rapidjson::Value(tree.cost_sc), a); 
+  d.AddMember("n_cov", rapidjson::Value(tree.terms_cov.size()), a); 
   d.AddMember("runtime", rapidjson::Value(time_elapsed_ms), a); 
+  d.AddMember("sssp_nodes_visited", rapidjson::Value(std::stoi(tree.debuginfo.at("sssp_nodes_visited"))), a); 
 
   rapidjson::StringBuffer buffer;
   rapidjson::Writer<rapidjson::StringBuffer> writer(buffer);
