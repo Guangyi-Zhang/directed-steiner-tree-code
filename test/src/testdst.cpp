@@ -108,7 +108,8 @@ TEST_CASE("cycles") {
   CHECK(dt.naive_alg().cost == 2+2);
   auto tree = dt.level2_alg();
   CHECK(tree.cost == 2+2);
-  CHECK(tree.cost_sc == 2+4); // pick 2 and then 4
+  // CHECK(tree.cost_sc == 2+4); // pick 2 and then 4
+  CHECK(tree.cost_sc == 4); // pick 2 only
   CHECK((tree.terms_cov == std::unordered_set<int> {6,7}));
 }
 

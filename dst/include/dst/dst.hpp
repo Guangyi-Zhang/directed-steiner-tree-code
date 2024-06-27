@@ -212,8 +212,9 @@ namespace dst {
         auto idx = idxs[i];
         auto t = terms_left_v[idx];
         double den_i = (tree.cost_sc + ds_vt[idx]) / (i+1);
-        if (i == 0 or den_i < tree.density())
+        if (i == 0 or leq(den_i, tree.density())) {
           tree.add_arc(std::make_pair(v, t), ds_vt[idx], trace_t.at(t), true, true);
+        }
         else 
           break; // stop once adding a t increases den_v
       }
