@@ -14,6 +14,7 @@
 #include <unordered_set>
 #include <unordered_map>
 #include <tuple>
+#include <list>
 
 #include <fmt/ranges.h>
 #include <boost/container_hash/hash.hpp>
@@ -32,19 +33,26 @@ namespace dst {
     double d_rv;
 
     std::unordered_set<int> terms;
-    std::unordered_map<int, double> distances_t; // b/w v and terms
-    std::vector<int> terms_after_ready;
+    std::unordered_map<int, double> distances_v; // b/w v and terms
+    std::list<int> terms_after_ready;
     double cost_sc = 0;
     double distance_lastly_added = 0;
+    double density_ = -1; // fake density
     bool ready = false; 
+
+    Level2PartialTree() {};
 
     Level2PartialTree(int root, int v, double d_rv) : 
         root {root}, v {v}, d_rv {d_rv}, cost_sc {d_rv} {
       ;
     }
 
+    Level2PartialTree(double density) : density_ {density} {
+      ; // construct a fake tree with a specific density
+    }
+
     void add_term(int t, double d_vt) {
-      distances_t[t] = d_vt;
+      distances_v[t] = d_vt;
       double new_den = (cost_sc + d_vt) / (terms.size() + 1);
       if (ready or lq(density(), new_den)) {
         ready = true;
@@ -61,18 +69,24 @@ namespace dst {
         if (not has_key(terms, t))
           continue;
         terms.erase(t);
-        cost_sc -= distances_t.at(t);
+        cost_sc -= distances_v.at(t);
       }
 
       // reset
       ready = false;
       distance_lastly_added = 0;
-      auto terms_tmp = std::move(terms_after_ready);
-      terms_after_ready.clear();
-      for (auto t: terms_tmp) {
-        if (has_key(terms, t))
+      while (not ready) {
+        if (terms_after_ready.empty())
+          break;
+        auto t = terms_after_ready.front();
+        terms_after_ready.pop_front();
+
+        if (has_key(terms_del, t)) 
           continue;
-        add_term(t, distances_t.at(t));
+
+        add_term(t, distances_v.at(t));
+        if (ready) 
+          terms_after_ready.push_front(t);
       }
     }
 
@@ -87,21 +101,32 @@ namespace dst {
     }
 
     double density() {
+      if (density_ > 0) 
+        return density_;
       if (terms.size() == 0)
         return std::numeric_limits<double>::max();
       return cost_sc / terms.size();
     }
 
-    bool is_ready() {
+    bool is_ready(double d_LB=-1) {
+      if (ready)
+        return true;
+
+      if (d_LB >= 0) {
+        double new_den = (cost_sc + d_LB) / (terms.size() + 1);
+        if (leq(density(), new_den)) 
+          ready = true;
+      }
+
       return ready;
     }
 
-    PartialTree to_tree(const std::unordered_map<int,int> &trace_r, 
+    PartialTree to_tree (const std::unordered_map<int,int> &trace_r, 
         const std::unordered_map<int, std::unordered_map<int,int>> &trace_t) {
       PartialTree tree {root};
       tree.add_arc(std::make_pair(root, v), d_rv, trace_r);
       for (auto t: terms) {
-        tree.add_arc(std::make_pair(v, t), distances_t.at(t), trace_t.at(t), true, true);
+        tree.add_arc(std::make_pair(v, t), distances_v.at(t), trace_t.at(t), true, true);
       }
       return tree;
     }
@@ -203,7 +228,6 @@ namespace dst {
     }
 
 
-/*
     PartialTree level2_rooted_at_r_co(
         int r,
         const std::unordered_set<int> &V_cand, 
@@ -214,68 +238,104 @@ namespace dst {
       const auto dists_r = std::move(p_r.first);
       const auto trace_r = std::move(p_r.second);
 
-      // iteratively add 2-level partial trees
-      PartialTree par {r};
-      int v_best {NONVERTEX};
-      CoordinatedDijkstra cosssp {adj_r, w, terms_cand, true}; // dijktra from each terminal
+      // init a Level2PartialTree for each v
       std::unordered_map<int, Level2PartialTree> trees;
       auto cmp_level2 = [](Level2PartialTree* a, Level2PartialTree* b) { 
         return a->density() < b->density(); 
       };
-      set<Inv*, decltype(cmp_level2)> LBs(cmp_level2); // a tree to sort LBs
+      std::set<Level2PartialTree*, decltype(cmp_level2)> LBs(cmp_level2); // a set as balanced binary-tree to sort LBs
       for (auto v: V_cand) {
         if (not has_key(dists_r, v))
           continue;
         trees[v] = std::move(Level2PartialTree {root, v, dists_r.at(v)});
-        LBs.insert(&trees[v]);
+        LBs.insert(&trees.at(v));
       }
+
+      // define what to do after finding a greedy partial tree
+      PartialTree par {r};
+      int v_best {NONVERTEX};
+      CoordinatedDijkstra cosssp {adj_r, w, terms_cand, true}; // dijktra from each terminal
+      auto add_greedy = [&] (Level2PartialTree& tree_best) {
+        PartialTree &&best = tree_best.to_tree(trace_r, cosssp.trace_t);
+        for (auto t: best.terms_cov) {
+          cosssp.delete_source(t);
+        }
+        for (auto v: V_cand) {
+          if (not has_key(dists_r, v))
+            continue;
+          auto &tree_v = trees.at(v);
+          tree_v.erase_and_reset(best.terms_cov);
+          LBs.insert(&tree_v);
+        }
+        par.append(best);
+        v_best = NONVERTEX; // reset
+      };
+
+      // iteratively add 2-level greedy partial trees
       while (terms_cand.size() > par.terms_cov.size()) {
         int t, v;
         double d_vt;
         std::tie(t, v, d_vt) = cosssp.next();
-        if (not has_key(dists_r, v))
-          continue;
-        auto &tree_v = trees[v];
-        tree_v.add_arc(t, d_vt);
-
-        // update UB v_best
-        if (v_best == NONVERTEX or 
-            tree_v.density() < trees[v_best].density() or
-            eq(tree_v.density(), best.density()) and // break ties
-            tree_v.terms.size() > best.terms.size()) {
-          v_best = v;
+        if (t == NONVERTEX) { // run out of next()
+          if (v_best == NONVERTEX)
+            break;
+          auto &tree_best = trees.at(v_best);
+          if (tree_best.terms.size() == 0)
+            break;
+          add_greedy(tree_best);
         }
+        if (has_key(terms_cand, v) or not has_key(dists_r, v))
+          continue;
+        auto &tree_v = trees.at(v);
+        tree_v.add_term(t, d_vt);
 
-        // compare UB with LB
-        auto &tree_best = trees[v_best];
-        LBs.erase(&tree_v);
-        LBs.insert(&tree_v);
-        auto it = LBs.begin(); // only check top1 and 2
-        if ((*it)->v == v_best)
-          std::advance(it, 1);
-        if (not leq(tree_best.density(), (*it)->density_LB()))
+        // update v_best as an UB
+        if (v_best == NONVERTEX)
+          v_best = v;
+        auto &tree_best_old = trees.at(v_best);
+        if(tree_v.density() < tree_best_old.density() or
+           eq(tree_v.density(), tree_best_old.density()) and // break ties
+           tree_v.terms.size() > tree_best_old.terms.size()) {
+          v_best = v;
+
+          Level2PartialTree tmp {tree_v.density()}; // a fake tree
+          for (auto it = LBs.upper_bound(&tmp); it != LBs.end(); ) {
+            it = LBs.erase(it);
+          }
+        }
+        auto &tree_best = trees.at(v_best);
+
+        // update LB and compare with UB
+        if (leq(tree_best.density(), tree_v.density_LB(terms_cand.size() - par.terms_cov.size())))
+          LBs.erase(&tree_v);
+        else {
+          LBs.erase(&tree_v);
+          LBs.insert(&tree_v);
+        }
+        if (LBs.size() >= 2)
+          continue;
+        if (LBs.size() == 1 and (*LBs.begin())->v != v_best)
           continue;
 
         // found a greedy partial tree
-        if (not tree_best.ready()) // until full construction
+        if (not tree_best.is_ready(d_vt)) // until full construction or run out of next()
+          // 1. wait for full construction
+          // 2. v_best has reached all remaining terminals
+          // 3. some terminals are not reachable
+          // 4. v_best need not wait with large d_vt as a LB
           continue;
-        PartialTree &&best = tree_best.tree(cosssp.trace_t);
-        if (best.terms_cov.size() == 0) // the rest terminals not reachable
+        if (tree_best.terms.size() == 0) // the rest terminals not reachable
           break;
-        for (auto t: best.terms_cov) {
-          terms_left.erase(t);
-          cosssp.erase(t);
-          for (auto it: LBs) {
-            (*it)->erase(t);
-          }
-        }
-        par.append(std::move(best));
-        v_best = NONVERTEX; // reset
+        add_greedy(tree_best);
       }
 
       return par;
     }
-    */
+
+
+    PartialTree level2_co_alg() {
+      return level2_rooted_at_r_co(root, V, terms_dm);
+    }
 
 
     PartialTree level2_rooted_at_r(

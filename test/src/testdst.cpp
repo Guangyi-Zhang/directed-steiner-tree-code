@@ -49,6 +49,9 @@ TEST_CASE("Level2PartialTree") {
   CHECK(eq(tree.density(), 4));
   CHECK(eq(tree.density_LB(k), tree.density()));
   CHECK(tree.terms.size() == 2);
+
+  Level2PartialTree tree2 {0.5};
+  CHECK(eq(tree2.density(), 0.5));
 }
 
 
@@ -176,7 +179,13 @@ TEST_CASE("level2_alg") {
   DST dt = DST(edges, weights, 0, terms);
 
   CHECK(dt.naive_alg() == 1*3 + 2*3);
+
   auto tree = dt.level2_alg();
+  CHECK(tree.cost == 2.5 + 1*3);
+  CHECK(tree.cost_sc == 2.5 + 1*3);
+  CHECK((tree.terms_cov == std::unordered_set<int> {14,15,16}));
+
+  tree = dt.level2_co_alg();
   CHECK(tree.cost == 2.5 + 1*3);
   CHECK(tree.cost_sc == 2.5 + 1*3);
   CHECK((tree.terms_cov == std::unordered_set<int> {14,15,16}));
@@ -243,7 +252,7 @@ TEST_CASE("CoordinatedDijkstra") {
   std::tie(source, u, d_u) = cosssp.next();
   CHECK ((source == 13 and u == 2 and eq(d_u,2.5)));
 
-  cosssp.skip_source(11);
+  cosssp.delete_source(11);
   std::tie(source, u, d_u) = cosssp.next();
   CHECK ((source == 12 and u == 1 and eq(d_u,3)));
 

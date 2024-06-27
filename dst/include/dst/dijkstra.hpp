@@ -1,9 +1,14 @@
 #pragma once
 
 #include <unordered_map>
+#include <unordered_set>
 #include <tuple>
+#include <vector>
+#include <list>
+#include <functional> // std::greater
 
 #include <boost/container_hash/hash.hpp>
+#include <dst/consts.hpp>
 
 
 namespace dst {
@@ -52,7 +57,7 @@ namespace dst {
 
     std::unordered_map<int, std::unordered_map<int,double>> distances_t;
     std::unordered_map<int, std::unordered_map<int,int>> trace_t;
-    std::unordered_set<int> sources_skipped;
+    std::unordered_set<int> sources_del;
     std::priority_queue<std::tuple<double,int,int,int>, 
                         std::vector<std::tuple<double,int,int,int>>, 
                         std::greater<std::tuple<double,int,int,int>>> pq;
@@ -70,19 +75,19 @@ namespace dst {
     }
 
 
-    void skip_source(int src) {
-      sources_skipped.insert(src);
+    void delete_source(int src) {
+      sources_del.insert(src);
     }
 
 
     std::tuple<int,int,double> next() {
-      while (!pq.empty()) {
+      while (not pq.empty()) {
         double d_u;
         int u_prev, u, source; 
         std::tie(d_u, u_prev, u, source) = pq.top();
         pq.pop();
 
-        if (has_key(sources_skipped, source)) 
+        if (has_key(sources_del, source)) 
           continue;
         auto &distances = distances_t[source];
         if (has_key(distances, u)) 
@@ -99,6 +104,9 @@ namespace dst {
 
         return std::make_tuple(source, u, d_u); // break
       }
+
+      // nothing to return
+      return std::make_tuple(NONVERTEX, NONVERTEX, -1);
     }
 
   }; // end of class
