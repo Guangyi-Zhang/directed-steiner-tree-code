@@ -166,19 +166,22 @@ namespace dst {
 
     void print() {
       auto &&v2nd = to_treenode();
-      _print_treenode(root, v2nd, "", true);
+      _print_treenode(root, NONVERTEX, v2nd, "", true);
     }
 
-    void _print_treenode(int v, std::unordered_map<int, TreeNode> &v2nd, 
+    void _print_treenode(int v, int pa, std::unordered_map<int, TreeNode> &v2nd, 
         std::string prefix, bool is_last_child) {
       auto &nd = v2nd.at(v);
       fmt::print(prefix);
       fmt::print(is_last_child ? "└──" : "├──");
-      fmt::println("{}", v);
+      if (pa != NONVERTEX)
+        fmt::println("{} ({:05.1f})", v, PartialTree::w->at(std::make_pair(pa, v)));
+      else
+        fmt::println("{}", v);
       size_t i = 0;
       for (auto child : nd.children) {
       //for (size_t i=0; i < nd.children.size(); i++) {
-        _print_treenode(child, v2nd, 
+        _print_treenode(child, v, v2nd, 
             prefix + (is_last_child ? "    " : "│   "),
             i == nd.children.size()-1);
         i++;
