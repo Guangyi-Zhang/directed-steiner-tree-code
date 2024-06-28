@@ -14,6 +14,46 @@
 #include <tuple>
 
 
+TEST_CASE("level2_co_alg") {
+  using namespace dst;
+  /*
+    <-----+0+----->
+    |             |
+    |             |
+    v             v
+    1             2+------>
+    +             +       |
+    |             |       |
+    |             |       v
+    v----->11<----v       12
+  */
+
+  std::vector<std::pair<int,int>> edges {std::make_pair(0,1), 
+                                         std::make_pair(0,2), 
+                                         std::make_pair(1,11), 
+                                         std::make_pair(2,11), 
+                                         std::make_pair(2,12), 
+                                         };
+  std::vector<double> weights {1,1, 99,1,1};
+  int root = 0;
+  std::vector<int> terms {11,12};
+  DST dt = DST(edges, weights, root, terms);
+
+  CHECK(dt.naive_alg().cost == 3);
+  CHECK(dt.naive_alg().cost_sc == 4);
+  CHECK(dt.naive_alg().debuginfo.at("sssp_nodes_visited") == "7"); // 5+2 dummies
+
+  CHECK(dt.level2_alg().cost == 3);
+  CHECK(dt.level2_alg().cost_sc == 3);
+  CHECK(dt.level2_alg().debuginfo.at("sssp_nodes_visited") == "16"); // 7+(5+4)
+
+  CHECK(dt.level2_co_alg().cost == 3);
+  CHECK(dt.level2_co_alg().cost_sc == 3);
+  CHECK(dt.level2_co_alg().debuginfo.at("sssp_nodes_visited") == "13"); // 7+2*(3)
+}
+
+
+
 TEST_CASE("Level2PartialTree") {
   using namespace dst;
 

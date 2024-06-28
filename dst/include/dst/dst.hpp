@@ -313,7 +313,8 @@ namespace dst {
           continue;
 
         // found a greedy partial tree
-        if (not tree_best.is_ready(d_vt)) // until full construction or run out of next()
+        if (not tree_best.is_ready(d_vt) and  // until full construction
+            tree_best.terms.size() < (terms_cand.size() - par.terms_cov.size()))
           // 1. wait for full construction
           // 2. v_best has reached all remaining terminals
           // 3. some terminals are not reachable
