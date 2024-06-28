@@ -49,9 +49,9 @@ auto main(int argc, char** argv) -> int {
   std::string version {"v2"}; // @20240624: start making level2 faster
   int rep {1};
 
-  std::string method {"naive"};
+  //std::string method {"naive"};
   //std::string method {"level2"};
-  //std::string method {"level2co"};
+  std::string method {"level2co"};
 
   double alpha = 0.5;
   std::string dataset {"random_graph_5000.csv"};
@@ -145,6 +145,7 @@ auto main(int argc, char** argv) -> int {
   d.AddMember("alpha", rapidjson::Value(alpha), a); 
   d.AddMember("cost", rapidjson::Value(tree.cost), a); 
   d.AddMember("cost_sc", rapidjson::Value(tree.cost_sc), a); 
+  d.AddMember("cost_trimmed", rapidjson::Value(tree.cost_trimmed()), a); 
   d.AddMember("n_cov", rapidjson::Value(tree.terms_cov.size()), a); 
   d.AddMember("runtime", rapidjson::Value(time_elapsed_ms), a); 
   d.AddMember("sssp_nodes_visited", rapidjson::Value(std::stoi(tree.debuginfo.at("sssp_nodes_visited"))), a); 
