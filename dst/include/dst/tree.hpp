@@ -166,6 +166,8 @@ namespace dst {
 
     void print() {
       auto &&v2nd = to_treenode();
+      if (v2nd.empty())
+        return;
       _print_treenode(root, NONVERTEX, v2nd, "", true);
     }
 

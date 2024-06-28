@@ -273,8 +273,14 @@ namespace dst {
         double d_vt;
         std::tie(t, v, d_vt) = cosssp.next();
         if (t == NONVERTEX) { // run out of next()
-          if (v_best == NONVERTEX)
-            break;
+          for (auto &p: trees) {
+            auto &tr = p.second;
+            if (v_best == NONVERTEX or 
+                lq(tr.density(), trees.at(v_best).density()) or
+                (eq(tr.density(), trees.at(v_best).density()) and 
+                 tr.terms.size() > trees.at(v_best).terms.size()))
+              v_best = tr.v;
+          }
           auto &tree_best = trees.at(v_best);
           if (tree_best.terms.size() == 0)
             break;

@@ -46,37 +46,55 @@ auto main(int argc, char** argv) -> int {
 
   // parameters
   // std::string version {"v1"}; // @20240616: testing
-  std::string version {"v2"}; // @20240624: start making level2 faster
+  //std::string version {"v2"}; // @20240624: start making level2 faster
+  std::string version {"v3"}; // @20240628: level2_co_alg ready
   int rep {1};
 
   //std::string method {"naive"};
-  std::string method {"level2"};
-  //std::string method {"level2co"};
+  //std::string method {"level2"};
+  std::string method {"level2co"};
 
   double alpha = 0.5;
-  std::string dataset {"random_graph_5000.csv"};
+  //std::string dataset {"random_graph_500.csv"};
+  std::string dataset {"soc-Epinions1.txt"};
 
   // load data
   std::vector<std::pair<int,int>> edges;
   std::vector<double> weights;
 
   std::ifstream file("datasets/" + dataset);
+  
   std::string line;
   if (file.is_open()) {
-    while (std::getline(file, line)) {
-      // split the line into individual values
-      std::stringstream ss(line);
-      std::string value;
+    if (dataset == "soc-Epinions1.txt") {
+      while (std::getline(file, line)) {
+        if (line[0] == '#')
+          continue;
 
-      std::getline(ss, value, ',');
-      int v1 = std::stoi(value);
-      std::getline(ss, value, ',');
-      int v2 = std::stoi(value);
-      std::getline(ss, value, ',');
-      double w = std::stod(value);
+        std::istringstream iss {line};
+        std::string value;
+        int v1, v2;
+        iss >> v1 >> v2;
 
-      edges.push_back({v1,v2});
-      weights.push_back(w);
+        edges.push_back({v1,v2});
+        weights.push_back(1);
+      }
+    } else {
+      while (std::getline(file, line)) {
+        // split the line into individual values
+        std::stringstream ss(line);
+        std::string value;
+
+        std::getline(ss, value, ',');
+        int v1 = std::stoi(value);
+        std::getline(ss, value, ',');
+        int v2 = std::stoi(value);
+        std::getline(ss, value, ',');
+        double w = std::stod(value);
+
+        edges.push_back({v1,v2});
+        weights.push_back(w);
+      }
     }
 
     file.close();
@@ -99,6 +117,8 @@ auto main(int argc, char** argv) -> int {
     terms = {102, 435, 348, 270, 106, 71, 188, 20, 102, 121};
   if (dataset.compare("random_graph_250.csv") == 0)
     terms = {102, 179, 92, 14, 106, 71, 188, 20, 102, 121};
+  if (dataset == "soc-Epinions1.txt")
+    terms = {7270, 860, 53900, 5191, 25734, 6265, 466, 4426, 65578, 8322};
   fmt::println("terms: {}", terms);
 
   /* START RUNNING */
