@@ -50,6 +50,8 @@ TEST_CASE("level2_co_alg") {
   CHECK(dt.level2_co_alg().cost == 3);
   CHECK(dt.level2_co_alg().cost_sc == 3);
   CHECK(dt.level2_co_alg().debuginfo.at("sssp_nodes_visited") == "13"); // 7+2*(3)
+
+  dt.level2_co_alg().print();
 }
 
 

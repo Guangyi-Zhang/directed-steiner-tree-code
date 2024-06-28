@@ -50,8 +50,8 @@ auto main(int argc, char** argv) -> int {
   int rep {1};
 
   //std::string method {"naive"};
-  //std::string method {"level2"};
-  std::string method {"level2co"};
+  std::string method {"level2"};
+  //std::string method {"level2co"};
 
   double alpha = 0.5;
   std::string dataset {"random_graph_5000.csv"};
@@ -154,6 +154,8 @@ auto main(int argc, char** argv) -> int {
   rapidjson::Writer<rapidjson::StringBuffer> writer(buffer);
   d.Accept(writer);
   spdlog::info("{}", buffer.GetString());
+
+  tree.print();
 
   return 0;
 }

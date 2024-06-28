@@ -16,6 +16,22 @@
 
 namespace dst {
 
+
+  class TreeNode {
+  public:
+    int v {NONVERTEX}, pa {NONVERTEX};
+    std::unordered_set<int> children;
+
+    TreeNode() {
+      ;
+    }
+
+    TreeNode(int v) : v {v} {
+      ;
+    }
+  };
+
+
   class PartialTree {
   public:
     static const std::unordered_map<std::pair<int,int>, double, boost::hash<std::pair<int,int>>>* w; 
@@ -125,6 +141,48 @@ namespace dst {
       }
 
       return es;
+    }
+
+    std::unordered_map<int, TreeNode> to_treenode() const {
+      std::unordered_map<int, TreeNode> v2nd;
+
+      for (auto t: terms_cov) {
+        int v {t};
+        while (trace.at(v) != NONVERTEX) {
+          int pv = trace.at(v);
+          if (not has_key(v2nd, pv))
+            v2nd[pv] = TreeNode {pv};
+          v2nd.at(pv).children.insert(v);
+          if (not has_key(v2nd, v))
+            v2nd[v] = TreeNode {v};
+          v2nd.at(v).pa = v;
+
+          v = trace.at(v);
+        }
+      }
+
+      return v2nd;
+    }
+
+    void print() {
+      auto &&v2nd = to_treenode();
+      _print_treenode(root, v2nd, "", true);
+    }
+
+    void _print_treenode(int v, std::unordered_map<int, TreeNode> &v2nd, 
+        std::string prefix, bool is_last_child) {
+      auto &nd = v2nd.at(v);
+      fmt::print(prefix);
+      fmt::print(is_last_child ? "└──" : "├──");
+      fmt::println("{}", v);
+      size_t i = 0;
+      for (auto child : nd.children) {
+      //for (size_t i=0; i < nd.children.size(); i++) {
+        _print_treenode(child, v2nd, 
+            prefix + (is_last_child ? "    " : "│   "),
+            i == nd.children.size()-1);
+        i++;
+      }
     }
 
     double cost_trimmed() const {
