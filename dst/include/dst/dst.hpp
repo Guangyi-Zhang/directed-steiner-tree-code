@@ -114,7 +114,7 @@ namespace dst {
 
       if (d_LB >= 0) {
         double new_den = (cost_sc + d_LB) / (terms.size() + 1);
-        if (leq(density(), new_den)) 
+        if (lq(density(), new_den)) 
           ready = true;
       }
 
@@ -251,6 +251,7 @@ namespace dst {
       int v_best {NONVERTEX};
       CoordinatedDijkstra cosssp {adj_r, w, terms_cand, true}; // dijktra from each terminal
       auto add_greedy = [&] (Level2PartialTree& tree_best) {
+        if (DEBUG) fmt::println("level2 greedy through {}, d_rv={}, cov={}, density={}", tree_best.v, tree_best.d_rv, tree_best.terms, tree_best.density());
         PartialTree &&best = tree_best.to_tree(trace_r, cosssp.trace_t);
         for (auto t: best.terms_cov) {
           cosssp.delete_source(t);
@@ -374,7 +375,7 @@ namespace dst {
               dists_t, trace_t, terms_left);
 
           // keep the best across all v
-          if (DEBUG) fmt::println("level2_rooted_at_{}: #terms_left={}, trying v={} and density={} and cov={}", r, terms_left.size(), v, tree_v.density(), tree_v.terms_cov);
+          //if (DEBUG) fmt::println("level2_rooted_at_{}: #terms_left={}, trying v={} and density={} and cov={}", r, terms_left.size(), v, tree_v.density(), tree_v.terms_cov);
           if (tree_v.density() < best.density() or // breaking tie
               (std::abs(tree_v.density() - best.density()) < EPSILON and 
                tree_v.terms_cov.size() > best.terms_cov.size())) { //
