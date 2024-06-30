@@ -35,7 +35,6 @@ namespace dst {
 
       if (has_key(distances, u)) 
         continue;
-
       distances[u] = d_u;
       trace[u] = u_prev;
       if (to_reach.size() > 0 and has_key(to_reach, u)) {
@@ -47,6 +46,8 @@ namespace dst {
       if (not has_key(adj, u))
         continue;
       for (const auto& v: adj.at(u)) {
+        if (has_key(distances, v)) 
+          continue;
         double weight = reverse? edgeweight.at({v,u}) : edgeweight.at({u,v});
         pq.emplace(d_u + weight, u, v);
       }
@@ -105,6 +106,8 @@ namespace dst {
         trace_t[source][u] = u_prev;
         if (has_key(*padj, u)) {
           for (const auto& v: padj->at(u)) {
+            if (has_key(distances, v)) 
+              continue;
             double weight = reverse? pedgeweight->at({v,u}) : pedgeweight->at({u,v});
             pq.emplace(d_u + weight, u, v, source);
           }
