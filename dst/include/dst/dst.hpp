@@ -346,18 +346,25 @@ namespace dst {
     PartialTree level2_rooted_at_r(
         int r,
         const std::unordered_set<int> &V_cand, 
-        const std::unordered_set<int> &terms_cand
+        const std::unordered_set<int> &terms_cand,
+        std::shared_ptr<std::unordered_map<int,double>> dists_r=nullptr,
+        std::shared_ptr<std::unordered_map<int,int>> trace_r=nullptr,
+        std::shared_ptr<std::unordered_map<int, std::shared_ptr<std::unordered_map<int,int>>>> trace_t=nullptr,
+        std::shared_ptr<std::unordered_map<int, std::shared_ptr<std::unordered_map<int,double>>>> dists_t=nullptr
     ) {
       // dijktra from the root
-      auto [dists_r, trace_r] = dijkstra(adj, w, r);
+      if (dists_r == nullptr)
+        std::tie(dists_r, trace_r) = dijkstra(adj, w, r);
 
       // dijktra from each terminal
-      auto trace_t = std::make_shared<std::unordered_map<int, std::shared_ptr<std::unordered_map<int,int>>>>(); 
-      auto dists_t = std::make_shared<std::unordered_map<int, std::shared_ptr<std::unordered_map<int,double>>>>();
-      for (auto t: terms_cand) {
-        auto [dists_, trace_] = dijkstra(adj_r, w, t, true);
-        (*dists_t)[t] = dists_; 
-        (*trace_t)[t] = trace_;
+      if (dists_t == nullptr) {
+        trace_t = std::make_shared<std::unordered_map<int, std::shared_ptr<std::unordered_map<int,int>>>>();
+        dists_t = std::make_shared<std::unordered_map<int, std::shared_ptr<std::unordered_map<int,double>>>>();
+        for (auto t: terms_cand) {
+          auto [dists_, trace_] = dijkstra(adj_r, w, t, true);
+          (*dists_t)[t] = dists_; 
+          (*trace_t)[t] = trace_;
+        }
       }
 
       // iteratively add 2-level partial trees
