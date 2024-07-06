@@ -123,13 +123,13 @@ namespace dst {
     }
 
     PartialTree to_tree (
-        const std::unordered_map<int,int> *trace_r, 
-        const std::unordered_map<int, std::unique_ptr<std::unordered_map<int,int>>> *trace_t
+        const std::shared_ptr<std::unordered_map<int,int>> trace_r, 
+        const std::shared_ptr<std::unordered_map<int, std::shared_ptr<std::unordered_map<int,int>>>> trace_t
     ) {
       PartialTree tree {root};
       tree.add_arc(std::make_pair(root, v), d_rv, trace_r);
       for (auto t: terms) {
-        tree.add_arc(std::make_pair(v, t), distances_v.at(t), trace_t->at(t).get(), true, true);
+        tree.add_arc(std::make_pair(v, t), distances_v.at(t), trace_t->at(t), true, true);
       }
       return tree;
     }
@@ -188,9 +188,9 @@ namespace dst {
         int r,
         int v, 
         double d_rv, 
-        const std::unordered_map<int,int> *trace_r,
-        const std::unordered_map<int, std::unique_ptr<std::unordered_map<int,double>>> *dists_t,
-        const std::unordered_map<int, std::unique_ptr<std::unordered_map<int,int>>> *trace_t,
+        const std::shared_ptr<std::unordered_map<int,int>> trace_r,
+        const std::shared_ptr<std::unordered_map<int, std::shared_ptr<std::unordered_map<int,double>>>> dists_t,
+        const std::shared_ptr<std::unordered_map<int, std::shared_ptr<std::unordered_map<int,int>>>> trace_t,
         const std::unordered_set<int> &terms_left
     ){
       // collect all t's for the current v
@@ -213,7 +213,7 @@ namespace dst {
         auto t = terms_left_v[idx];
         double den_i = (tree.cost_sc + ds_vt[idx]) / (i+1);
         if (i == 0 or leq(den_i, tree.density())) {
-          tree.add_arc(std::make_pair(v, t), ds_vt[idx], trace_t->at(t).get(), true, true);
+          tree.add_arc(std::make_pair(v, t), ds_vt[idx], trace_t->at(t), true, true);
         }
         else 
           break; // stop once adding a t increases den_v
@@ -250,7 +250,7 @@ namespace dst {
       CoordinatedDijkstra cosssp {adj_r, w, terms_cand, true}; // dijktra from each terminal
       auto add_greedy = [&] (Level2PartialTree& tree_best) {
         if (DEBUG) fmt::println("level2 greedy through {}, d_rv={}, cov={}, density={}", tree_best.v, tree_best.d_rv, tree_best.terms, tree_best.density());
-        PartialTree &&best = tree_best.to_tree(trace_r.get(), &(cosssp.trace_t));
+        PartialTree &&best = tree_best.to_tree(trace_r, cosssp.trace_t);
         for (auto t: best.terms_cov) {
           cosssp.delete_source(t);
         }
@@ -330,7 +330,7 @@ namespace dst {
       }
 
       int sssp_nodes_visited = dists_r->size();
-      for (auto &p: cosssp.distances_t) {
+      for (auto &p: *(cosssp.distances_t)) {
         sssp_nodes_visited += p.second->size();
       }
       par.debuginfo["sssp_nodes_visited"] = std::to_string(sssp_nodes_visited);
@@ -352,12 +352,12 @@ namespace dst {
       auto [dists_r, trace_r] = dijkstra(adj, w, r);
 
       // dijktra from each terminal
-      auto trace_t = std::make_unique<std::unordered_map<int, std::unique_ptr<std::unordered_map<int,int>>>>(); 
-      auto dists_t = std::make_unique<std::unordered_map<int, std::unique_ptr<std::unordered_map<int,double>>>>();
+      auto trace_t = std::make_shared<std::unordered_map<int, std::shared_ptr<std::unordered_map<int,int>>>>(); 
+      auto dists_t = std::make_shared<std::unordered_map<int, std::shared_ptr<std::unordered_map<int,double>>>>();
       for (auto t: terms_cand) {
         auto [dists_, trace_] = dijkstra(adj_r, w, t, true);
-        (*dists_t)[t] = std::move(dists_); 
-        (*trace_t)[t] = std::move(trace_);
+        (*dists_t)[t] = dists_; 
+        (*trace_t)[t] = trace_;
       }
 
       // iteratively add 2-level partial trees
@@ -371,8 +371,8 @@ namespace dst {
           if (not has_key(*dists_r, v) or r == v)
             continue;
           double d_rv {dists_r->at(v)};
-          auto &&tree_v = level2_through_v(r, v, d_rv, trace_r.get(), 
-              dists_t.get(), trace_t.get(), terms_left);
+          auto &&tree_v = level2_through_v(r, v, d_rv, trace_r, 
+              dists_t, trace_t, terms_left);
 
           // keep the best across all v
           //if (DEBUG) fmt::println("level2_rooted_at_{}: #terms_left={}, trying v={} and density={} and cov={}", r, terms_left.size(), v, tree_v.density(), tree_v.terms_cov);
@@ -484,7 +484,7 @@ namespace dst {
           // add 2-level trees rooted at u 
           //fmt::println("V_: {}", V_);
           PartialTree tree_u {root};
-          tree_u.add_arc(std::make_pair(root, u), d_ru, trace_r.get());
+          tree_u.add_arc(std::make_pair(root, u), d_ru, trace_r);
           std::unordered_set<int> terms_left_u(terms_left.begin(), terms_left.end());
           while (terms_left_u.size() > 0) {
             auto &&tree2_u = level2_rooted_at_r(u, V_, terms_left_u);
@@ -537,7 +537,7 @@ namespace dst {
         if (not has_key(*trace, t))
             continue; // disconnected graph
 
-        tree.add_arc(std::make_pair(root, t), (*dists)[t], trace.get(), false, true);
+        tree.add_arc(std::make_pair(root, t), (*dists)[t], trace, false, true);
       }
 
       tree.debuginfo["sssp_nodes_visited"] = std::to_string(dists->size());

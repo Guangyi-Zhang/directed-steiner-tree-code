@@ -53,7 +53,7 @@ namespace dst {
     void add_arc(
         std::pair<int,int> arc, 
         double w_arc, 
-        const std::unordered_map<int,int> *trace_arc, 
+        const std::shared_ptr<std::unordered_map<int,int>> trace_arc, 
         bool reverse=false,
         bool is_terminal=false) {
       // start from PartialTree(root), arcs must be added from top-down
@@ -133,6 +133,7 @@ namespace dst {
 
     std::unordered_set<std::pair<int,int>, boost::hash<std::pair<int,int>>> 
     edges() const {
+      // TODO: made into pointer
       std::unordered_set<std::pair<int,int>, boost::hash<std::pair<int,int>>> es;
 
       for (auto t: terms_cov) {

@@ -21,8 +21,8 @@ namespace dst {
       bool reverse=false,
       const std::unordered_set<int> &to_reach=std::unordered_set<int> {}
   ) {
-    auto distances = std::make_unique<std::unordered_map<int,double>>();
-    auto trace = std::make_unique<std::unordered_map<int,int>>();
+    auto distances = std::make_shared<std::unordered_map<int,double>>();
+    auto trace = std::make_shared<std::unordered_map<int,int>>();
     std::priority_queue<std::tuple<double,int,int>, 
                         std::vector<std::tuple<double,int,int>>, 
                         std::greater<std::tuple<double,int,int>>> pq;
@@ -55,7 +55,7 @@ namespace dst {
       }
     }
 
-    return std::make_tuple(std::move(distances), std::move(trace));
+    return std::make_tuple(distances, trace);
   }
 
 
@@ -66,8 +66,8 @@ namespace dst {
     const std::unordered_set<int> *psources {nullptr};
     bool reverse=false;
 
-    std::unordered_map<int, std::unique_ptr<std::unordered_map<int,double>>> distances_t;
-    std::unordered_map<int, std::unique_ptr<std::unordered_map<int,int>>> trace_t;
+    std::shared_ptr<std::unordered_map<int, std::shared_ptr<std::unordered_map<int,double>>>> distances_t;
+    std::shared_ptr<std::unordered_map<int, std::shared_ptr<std::unordered_map<int,int>>>> trace_t;
     std::unordered_set<int> sources_del;
     std::priority_queue<std::tuple<double,int,int,int>, 
                         std::vector<std::tuple<double,int,int,int>>, 
@@ -81,6 +81,8 @@ namespace dst {
         bool reverse=false) :
         padj {&adj}, pedgeweight {&edgeweight}, psources {&sources}, reverse {reverse} 
     {
+      distances_t = std::make_shared<std::unordered_map<int, std::shared_ptr<std::unordered_map<int,double>>>>();
+      trace_t = std::make_shared<std::unordered_map<int, std::shared_ptr<std::unordered_map<int,int>>>>();
       for (auto &source: *psources) {
         pq.emplace(0, NONVERTEX, source, source);
       }
@@ -101,18 +103,16 @@ namespace dst {
 
         if (has_key(sources_del, source)) 
           continue;
-        if (not has_key(distances_t, source)) {
-          auto p1 = std::make_unique<std::unordered_map<int,double>>();
-          distances_t[source] = std::move(p1);
-          auto p2 = std::make_unique<std::unordered_map<int,int>>();
-          trace_t[source] = std::move(p2);
+        if (not has_key(*distances_t, source)) {
+          (*distances_t)[source] = std::make_shared<std::unordered_map<int,double>>();
+          (*trace_t)[source] = std::make_shared<std::unordered_map<int,int>>();
         }
-        auto &distances = distances_t[source];
+        auto &distances = distances_t->at(source);
         if (has_key(*distances, u)) 
           continue;
 
         (*distances)[u] = d_u;
-        (*trace_t[source])[u] = u_prev;
+        (*(trace_t->at(source)))[u] = u_prev;
         if (has_key(*padj, u)) {
           for (const auto& v: padj->at(u)) {
             if (has_key(*distances, v)) 
