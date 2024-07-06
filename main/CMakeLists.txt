@@ -25,6 +25,6 @@ set(RAPIDJSON_INCLUDE_DIR "${rapidjson_SOURCE_DIR}/include")
 set(SPDLOG_INCLUDE_DIR "${spdlog_SOURCE_DIR}/include")
 target_include_directories(${PROJECT_NAME} PUBLIC ${RAPIDJSON_INCLUDE_DIR} ${SPDLOG_INCLUDE_DIR})
 
-set_target_properties(${PROJECT_NAME} PROPERTIES CXX_STANDARD 11)
+set_target_properties(${PROJECT_NAME} PROPERTIES CXX_STANDARD 17)
 
 target_link_libraries(${PROJECT_NAME} DST cxxopts fmt::fmt)

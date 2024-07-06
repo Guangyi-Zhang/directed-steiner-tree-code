@@ -1,5 +1,6 @@
 #pragma once
 
+#include <memory>
 #include <unordered_map>
 #include <unordered_set>
 #include <tuple>
@@ -13,14 +14,15 @@
 
 namespace dst {
 
-  std::pair<std::unordered_map<int,double>, 
-            std::unordered_map<int,int>> dijkstra(const std::unordered_map<int, std::vector<int>> &adj, 
-                                                  const std::unordered_map<std::pair<int,int>, double, boost::hash<std::pair<int,int>>> &edgeweight, 
-                                                  int source,
-                                                  bool reverse=false,
-                                                  const std::unordered_set<int> &to_reach=std::unordered_set<int> {}) {
-    std::unordered_map<int,double> distances;
-    std::unordered_map<int,int> trace;
+  auto dijkstra(
+      const std::unordered_map<int, std::vector<int>> &adj, 
+      const std::unordered_map<std::pair<int,int>, double, boost::hash<std::pair<int,int>>> &edgeweight, 
+      int source,
+      bool reverse=false,
+      const std::unordered_set<int> &to_reach=std::unordered_set<int> {}
+  ) {
+    auto distances = std::make_unique<std::unordered_map<int,double>>();
+    auto trace = std::make_unique<std::unordered_map<int,int>>();
     std::priority_queue<std::tuple<double,int,int>, 
                         std::vector<std::tuple<double,int,int>>, 
                         std::greater<std::tuple<double,int,int>>> pq;
@@ -33,10 +35,10 @@ namespace dst {
       std::tie(d_u, u_prev, u) = pq.top();
       pq.pop();
 
-      if (has_key(distances, u)) 
+      if (has_key(*distances, u)) 
         continue;
-      distances[u] = d_u;
-      trace[u] = u_prev;
+      (*distances)[u] = d_u;
+      (*trace)[u] = u_prev;
       if (to_reach.size() > 0 and has_key(to_reach, u)) {
         n_reached++;
         if (to_reach.size() == n_reached)
@@ -46,14 +48,14 @@ namespace dst {
       if (not has_key(adj, u))
         continue;
       for (const auto& v: adj.at(u)) {
-        if (has_key(distances, v)) 
+        if (has_key(*distances, v)) 
           continue;
         double weight = reverse? edgeweight.at({v,u}) : edgeweight.at({u,v});
         pq.emplace(d_u + weight, u, v);
       }
     }
 
-    return std::make_pair(distances, trace);
+    return std::make_tuple(std::move(distances), std::move(trace));
   }
 
 
@@ -64,20 +66,21 @@ namespace dst {
     const std::unordered_set<int> *psources {nullptr};
     bool reverse=false;
 
-    std::unordered_map<int, std::unordered_map<int,double>> distances_t;
-    std::unordered_map<int, std::unordered_map<int,int>> trace_t;
+    std::unordered_map<int, std::unique_ptr<std::unordered_map<int,double>>> distances_t;
+    std::unordered_map<int, std::unique_ptr<std::unordered_map<int,int>>> trace_t;
     std::unordered_set<int> sources_del;
     std::priority_queue<std::tuple<double,int,int,int>, 
                         std::vector<std::tuple<double,int,int,int>>, 
                         std::greater<std::tuple<double,int,int,int>>> pq;
 
 
-    CoordinatedDijkstra(const std::unordered_map<int, std::vector<int>> &adj, 
-                        const std::unordered_map<std::pair<int,int>, double, boost::hash<std::pair<int,int>>> &edgeweight, 
-                        const std::unordered_set<int> &sources,
-                        bool reverse=false) :
-        padj {&adj}, pedgeweight {&edgeweight}, psources {&sources}, reverse {reverse} {
-
+    CoordinatedDijkstra(
+        const std::unordered_map<int, std::vector<int>> &adj, 
+        const std::unordered_map<std::pair<int,int>, double, boost::hash<std::pair<int,int>>> &edgeweight, 
+        const std::unordered_set<int> &sources,
+        bool reverse=false) :
+        padj {&adj}, pedgeweight {&edgeweight}, psources {&sources}, reverse {reverse} 
+    {
       for (auto &source: *psources) {
         pq.emplace(0, NONVERTEX, source, source);
       }
@@ -98,15 +101,21 @@ namespace dst {
 
         if (has_key(sources_del, source)) 
           continue;
+        if (not has_key(distances_t, source)) {
+          auto p1 = std::make_unique<std::unordered_map<int,double>>();
+          distances_t[source] = std::move(p1);
+          auto p2 = std::make_unique<std::unordered_map<int,int>>();
+          trace_t[source] = std::move(p2);
+        }
         auto &distances = distances_t[source];
-        if (has_key(distances, u)) 
+        if (has_key(*distances, u)) 
           continue;
 
-        distances[u] = d_u;
-        trace_t[source][u] = u_prev;
+        (*distances)[u] = d_u;
+        (*trace_t[source])[u] = u_prev;
         if (has_key(*padj, u)) {
           for (const auto& v: padj->at(u)) {
-            if (has_key(distances, v)) 
+            if (has_key(*distances, v)) 
               continue;
             double weight = reverse? pedgeweight->at({v,u}) : pedgeweight->at({u,v});
             pq.emplace(d_u + weight, u, v, source);

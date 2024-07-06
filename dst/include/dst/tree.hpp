@@ -50,8 +50,10 @@ namespace dst {
       trace_sc[root] = NONVERTEX;
     }
 
-    void add_arc(std::pair<int,int> arc, double w_arc, 
-        const std::unordered_map<int,int> &trace_arc, 
+    void add_arc(
+        std::pair<int,int> arc, 
+        double w_arc, 
+        const std::unordered_map<int,int> *trace_arc, 
         bool reverse=false,
         bool is_terminal=false) {
       // start from PartialTree(root), arcs must be added from top-down
@@ -63,9 +65,9 @@ namespace dst {
       cost_sc += w_arc;
 
       auto v = reverse? arc.first: arc.second;
-      while (trace_arc.at(v) != NONVERTEX) {
-        auto e = reverse? std::make_pair(v, trace_arc.at(v)) : 
-                          std::make_pair(trace_arc.at(v), v);
+      while (trace_arc->at(v) != NONVERTEX) {
+        auto e = reverse? std::make_pair(v, trace_arc->at(v)) : 
+                          std::make_pair(trace_arc->at(v), v);
         if (not has_key(trace, e.second)) {
           cost += PartialTree::w->at(e);
           trace[e.second] = e.first;
@@ -80,7 +82,7 @@ namespace dst {
           // ok to shortcut 
           break;
         }
-        v = trace_arc.at(v);
+        v = trace_arc->at(v);
       }
     }
 
@@ -129,7 +131,8 @@ namespace dst {
       return terms_cov.size() == 0 ? true: false;
     }
 
-    std::unordered_set<std::pair<int,int>, boost::hash<std::pair<int,int>>> edges() const {
+    std::unordered_set<std::pair<int,int>, boost::hash<std::pair<int,int>>> 
+    edges() const {
       std::unordered_set<std::pair<int,int>, boost::hash<std::pair<int,int>>> es;
 
       for (auto t: terms_cov) {
@@ -171,8 +174,13 @@ namespace dst {
       _print_treenode(root, NONVERTEX, v2nd, "", true);
     }
 
-    void _print_treenode(int v, int pa, std::unordered_map<int, TreeNode> &v2nd, 
-        std::string prefix, bool is_last_child) {
+    void _print_treenode(
+        int v, 
+        int pa, 
+        std::unordered_map<int, TreeNode> &v2nd, 
+        std::string prefix, 
+        bool is_last_child
+    ) {
       auto &nd = v2nd.at(v);
       fmt::print(prefix);
       fmt::print(is_last_child ? "└──" : "├──");
@@ -202,4 +210,5 @@ namespace dst {
   };
 
   const std::unordered_map<std::pair<int,int>, double, boost::hash<std::pair<int,int>>>* PartialTree::w = nullptr; 
-}
+
+} // namespace dst

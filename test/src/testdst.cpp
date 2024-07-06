@@ -90,6 +90,7 @@ TEST_CASE("CoordinatedDijkstra") {
 }
 
 
+
 TEST_CASE("dijkstra") {
   using namespace dst;
 
@@ -114,39 +115,33 @@ TEST_CASE("dijkstra") {
   std::vector<int> terms {};
   DST dt = DST(edges, weights, 0, terms);
 
-  auto p1 = dijkstra(dt.adj, dt.w, 0);
-  auto dists = p1.first;
-  auto trace = p1.second;
-  CHECK(dists.at(0) == 0);
-  CHECK(dists.at(1) == 1);
-  CHECK(dists.at(2) == 1);
-  CHECK(dists.at(3) == 1);
-  CHECK(dists.at(4) == 2);
-  CHECK(trace.at(4) == 3);
+  auto [dists, trace] = dijkstra(dt.adj, dt.w, 0);
+  CHECK(dists->at(0) == 0);
+  CHECK(dists->at(1) == 1);
+  CHECK(dists->at(2) == 1);
+  CHECK(dists->at(3) == 1);
+  CHECK(dists->at(4) == 2);
+  CHECK(trace->at(4) == 3);
 
-  auto p2 = dijkstra(dt.adj, dt.w, 4);
-  dists = p2.first;
-  trace = p2.second;
-  CHECK (dists.find(0) == dists.end());
-  CHECK (dists.find(1) == dists.end());
-  CHECK (dists.find(2) == dists.end());
-  CHECK (dists.at(3) == 1);
-  CHECK (dists.at(4) == 0);
+  std::tie(dists, trace) = dijkstra(dt.adj, dt.w, 4);
+  CHECK (dists->find(0) == dists->end());
+  CHECK (dists->find(1) == dists->end());
+  CHECK (dists->find(2) == dists->end());
+  CHECK (dists->at(3) == 1);
+  CHECK (dists->at(4) == 0);
 
-  auto p3 = dijkstra(dt.adj_r, dt.w, 4, true);
-  dists = p3.first;
-  trace = p3.second;
-  CHECK (dists.at(0) == 2);
-  CHECK (dists.find(1) == dists.end());
-  CHECK (dists.find(2) == dists.end());
-  CHECK (dists.at(3) == 1);
-  CHECK (dists.at(4) == 0);
-  CHECK (trace.at(4) == NONVERTEX);
-  CHECK (trace.at(3) == 4);
-  CHECK (trace.find(2) == trace.end());
+  std::tie(dists, trace) = dijkstra(dt.adj_r, dt.w, 4, true);
+  CHECK (dists->at(0) == 2);
+  CHECK (dists->find(1) == dists->end());
+  CHECK (dists->find(2) == dists->end());
+  CHECK (dists->at(3) == 1);
+  CHECK (dists->at(4) == 0);
+  CHECK (trace->at(4) == NONVERTEX);
+  CHECK (trace->at(3) == 4);
+  CHECK (trace->find(2) == trace->end());
 
   auto p4 = dijkstra(dt.adj, dt.w, 0, false, {3});
-  CHECK (not has_key(p4.first, 4));
+  CHECK (not has_key(*std::get<0>(p4), 4));
 }
 
 

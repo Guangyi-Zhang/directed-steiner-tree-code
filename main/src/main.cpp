@@ -47,16 +47,17 @@ auto main(int argc, char** argv) -> int {
   // parameters
   // std::string version {"v1"}; // @20240616: testing
   //std::string version {"v2"}; // @20240624: start making level2 faster
-  std::string version {"v3"}; // @20240628: level2_co_alg ready
+  //std::string version {"v3"}; // @20240628: level2_co_alg ready
+  std::string version {"v4"}; // @20240705: start making level3 faster
   int rep {1};
 
   //std::string method {"naive"};
-  //std::string method {"level2"};
-  std::string method {"level2co"};
+  std::string method {"level2"};
+  //std::string method {"level2co"};
 
   double alpha = 0.5;
-  //std::string dataset {"random_graph_500.csv"};
-  std::string dataset {"soc-Epinions1.txt"};
+  std::string dataset {"random_graph_5000.csv"};
+  //std::string dataset {"soc-Epinions1.txt"};
 
   // load data
   std::vector<std::pair<int,int>> edges;
@@ -140,7 +141,7 @@ auto main(int argc, char** argv) -> int {
     tree = std::move(tree2);
   }
   else if (method.compare("level3") == 0) {
-    auto &&tree3 = dt.level3_alg(alpha);
+    auto &&tree3 = dt.level3_alg_outdated(alpha);
     tree = std::move(tree3);
   }
   else {
