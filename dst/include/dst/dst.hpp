@@ -131,7 +131,7 @@ namespace dst {
       for (auto v: V_cand) {
         if (not has_key(*dists_r, v))
           continue;
-        trees[v] = std::move(Level2PartialTree {root, v, dists_r->at(v)});
+        trees[v] = std::move(Level2PartialTree {r, v, dists_r->at(v)});
         LBs.insert(&trees.at(v));
       }
 
