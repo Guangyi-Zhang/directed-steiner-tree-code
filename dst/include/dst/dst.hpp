@@ -415,7 +415,7 @@ namespace dst {
     }
 
 
-    PartialTree level3_alg(const double alpha) {
+    PartialTree level3_alg_outdated(const double alpha) {
       // dijktra from the root
       auto &&p_r = dijkstra(adj, w, root);
       auto dists_r = std::move(p_r.first);

@@ -57,7 +57,7 @@ TEST_CASE("level3_alg") {
   CHECK(tree2.cost_sc == (2 + 2*2) * 2);
   CHECK((tree2.terms_cov == std::unordered_set<int> {25,26,27,28}));
 
-  auto &&tree3 = dt.level3_alg(0.99);
+  auto &&tree3 = dt.level3_alg_outdated(0.99);
   CHECK(tree3.cost == 4 + 2*1.5 + 4*1);
   CHECK(tree3.cost_sc == 4 + 2*1.5 + 4*1);
   CHECK((tree3.terms_cov == std::unordered_set<int> {25,26,27,28}));
