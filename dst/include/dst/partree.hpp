@@ -11,25 +11,45 @@
 
 namespace dst {
 
-  class PartialTree {
+  class BasePartialTree {
     public:
     int root {NONVERTEX}; 
+    std::unordered_set<int> terms;
+    double cost_sc = 0;
+
+    std::shared_ptr<std::unordered_map<int,int>> trace_r = nullptr;
+    std::shared_ptr<std::unordered_map<int, std::shared_ptr<std::unordered_map<int,int>>>> trace_t = nullptr;
+    std::shared_ptr<std::unordered_map<int, std::shared_ptr<std::unordered_map<int,int>>>> trace_u = nullptr;
+
+    std::unordered_map<std::string, std::string> debuginfo;
+
+    BasePartialTree() {};
+
+    double density() {
+      if (terms.size() == 0)
+        return std::numeric_limits<double>::max();
+      return cost_sc / terms.size();
+    }
+  };
+
+
+  class PartialTree: public BasePartialTree {
+    public:
     int v {NONVERTEX}; // the root has a single child
     double d_rv;
 
-    std::unordered_set<int> terms;
     std::unordered_map<int, double> distances_t;
     std::list<int> terms_after_ready;
-    double cost_sc = 0;
     double distance_lastly_added = 0;
     double density_ = -1; // fake density
     bool ready = false; 
 
     PartialTree() {};
 
-    PartialTree(int root, int v, double d_rv) : 
-        root {root}, v {v}, d_rv {d_rv}, cost_sc {d_rv} {
-      ;
+    PartialTree(int r, int v, double d_rv) : 
+        v {v}, d_rv {d_rv} {
+      root = r;
+      cost_sc = d_rv;
     }
 
     PartialTree(double density) : density_ {density} {
@@ -89,9 +109,7 @@ namespace dst {
       if (density_ > 0) 
         return density_;
 
-      if (terms.size() == 0)
-        return std::numeric_limits<double>::max();
-      return cost_sc / terms.size();
+      return BasePartialTree::density();
     }
 
     bool is_ready(double d_LB=-1) {
@@ -121,29 +139,25 @@ namespace dst {
   };
 
 
-  class PartialTreeManager {
+  class PartialTreeManager: public BasePartialTree {
     // can be used a 3-level partial tree if u != NONVERTEX
     public:
-    int root {NONVERTEX}; 
     int u {NONVERTEX}; // the root has a single child
     double d_ru;
-    std::vector<std::shared_ptr<PartialTree>> subtrees;
-
-    double cost_sc = 0;
-    std::unordered_set<int> terms;
+    std::vector<std::shared_ptr<PartialTree>> subtrees; // used as r->{v}->{t}
+    std::vector<std::shared_ptr<PartialTreeManager>> trees; // used as r->{u}->{v}->{t}
 
     PartialTreeManager() {};
 
-    PartialTreeManager(int r) : root {r} {};
+    PartialTreeManager(int r) {
+      root = r;
+    };
 
     PartialTreeManager(int r, int u, double d_ru) : 
-        root {r}, u {u}, d_ru {d_ru}, cost_sc {d_ru} {};
-
-    double density() {
-      if (terms.size() == 0)
-        return std::numeric_limits<double>::max();
-      return cost_sc / terms.size();
-    }
+        u {u}, d_ru {d_ru} {
+      root = r;
+      cost_sc = d_ru;
+    };
 
     void append(std::shared_ptr<PartialTree> tree) {
       subtrees.push_back(tree);
@@ -152,17 +166,37 @@ namespace dst {
         terms.insert(t);
     }
 
-    auto to_tree (
-        const std::shared_ptr<std::unordered_map<int,int>> trace_r, 
-        const std::shared_ptr<std::unordered_map<int, std::shared_ptr<std::unordered_map<int,int>>>> trace_t,
-        const std::shared_ptr<std::unordered_map<int, std::shared_ptr<std::unordered_map<int,int>>>> trace_u = nullptr
-    ) {
+    void append(std::shared_ptr<PartialTreeManager> tree) {
+      trees.push_back(tree);
+      cost_sc += tree->cost_sc;
+      for (auto t: tree->terms)
+        terms.insert(t);
+    }
+
+    auto to_tree () {
       auto tree = std::make_shared<Tree> (root);
 
+      // a helper
+      auto to_tree3 = [&] (const PartialTreeManager *tree3) {
+        tree->add_arc(std::make_pair(tree3->root, tree3->u), tree3->d_ru, trace_r);
+        for (auto tree2: tree3->subtrees) {
+          tree->add_arc(std::make_pair(tree3->u, tree2->v), tree2->d_rv, (*trace_u)[tree3->u]);
+          for (auto t: tree2->terms) {
+            tree->add_arc(std::make_pair(tree2->v, t), tree2->distances_t.at(t), trace_t->at(t), true, true);
+          }
+        }
+      };
+
       if (u != NONVERTEX) {
-        tree->add_arc(std::make_pair(root, u), d_ru, trace_r);
-        // TODO
+        // building r->u->{v}-{t}
+        to_tree3(this);
       } else {
+        // building r->{u}->{v}-{t}
+        for (auto tree3: trees) {
+          to_tree3(tree3.get());
+        }
+
+        // building r->{v}-{t}
         for (auto tree2: subtrees) {
           tree->add_arc(std::make_pair(root, tree2->v), tree2->d_rv, trace_r);
           for (auto t: tree2->terms) {

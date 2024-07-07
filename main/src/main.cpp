@@ -128,18 +128,22 @@ auto main(int argc, char** argv) -> int {
 
   DST dt = DST(edges, weights, root, terms);
 
-  auto tree = std::shared_ptr<Tree> (0);
+  std::shared_ptr<Tree> tree = nullptr;
+  std::shared_ptr<PartialTreeManager> partree = nullptr;
+  std::unordered_map<std::string, std::string> *debuginfo = nullptr;
   if (method.compare("naive") == 0) {
-    auto tree_naive = dt.naive_alg();
-    tree = tree_naive;
+    tree = dt.naive_alg();
+    debuginfo = &(tree->debuginfo);
   }
   else if (method.compare("level2") == 0) {
-    auto tree2 = dt.level2_alg();
-    tree = tree2;
+    partree = dt.level2_alg();
+    tree = partree->to_tree();
+    debuginfo = &(partree->debuginfo);
   }
   else if (method.compare("level2co") == 0) {
-    auto tree2 = dt.level2_co_alg();
-    tree = tree2;
+    partree = dt.level2_co_alg();
+    tree = partree->to_tree();
+    debuginfo = &(partree->debuginfo);
   }
   else if (method.compare("level3") == 0) {
     //auto tree3 = dt.level3_alg_outdated(alpha);
@@ -170,7 +174,7 @@ auto main(int argc, char** argv) -> int {
   d.AddMember("cost_trimmed", rapidjson::Value(tree->cost_trimmed()), a); 
   d.AddMember("n_cov", rapidjson::Value(tree->terms_cov.size()), a); 
   d.AddMember("runtime", rapidjson::Value(time_elapsed_ms), a); 
-  d.AddMember("sssp_nodes_visited", rapidjson::Value(std::stoi(tree->debuginfo.at("sssp_nodes_visited"))), a); 
+  d.AddMember("sssp_nodes_visited", rapidjson::Value(std::stoi(debuginfo->at("sssp_nodes_visited"))), a); 
 
   rapidjson::StringBuffer buffer;
   rapidjson::Writer<rapidjson::StringBuffer> writer(buffer);

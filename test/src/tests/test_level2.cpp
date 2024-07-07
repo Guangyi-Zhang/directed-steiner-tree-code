@@ -42,15 +42,15 @@ TEST_CASE("level2_co_alg") {
   CHECK(dt.naive_alg()->cost_sc == 4);
   CHECK(dt.naive_alg()->debuginfo.at("sssp_nodes_visited") == "7"); // 5+2 dummies
 
-  CHECK(dt.level2_alg()->cost == 3);
+  CHECK(dt.level2_alg()->to_tree()->cost == 3);
   CHECK(dt.level2_alg()->cost_sc == 3);
   CHECK(dt.level2_alg()->debuginfo.at("sssp_nodes_visited") == "16"); // 7+(5+4)
 
-  CHECK(dt.level2_co_alg()->cost == 3);
+  CHECK(dt.level2_co_alg()->to_tree()->cost == 3);
   CHECK(dt.level2_co_alg()->cost_sc == 3);
   CHECK(dt.level2_co_alg()->debuginfo.at("sssp_nodes_visited") == "13"); // 7+2*(3)
 
-  dt.level2_co_alg()->print();
+  dt.level2_co_alg()->to_tree()->print();
 }
 
 
@@ -126,9 +126,9 @@ TEST_CASE("crossing") {
   CHECK(dt.naive_alg()->cost_sc == 4+4+2);
   auto tree = dt.level2_alg(); // first pick 2->23, and then 1->{21,22}
   CHECK(tree->cost_sc == 2+(1+3+0.2*2+3));
-  CHECK(std::abs(tree->cost_sc - tree->cost - 0.2) < EPSILON); // include 1->11 but 11->2
-  CHECK(std::abs(tree->cost_trimmed() - (tree->cost_sc-0.2*2)) < EPSILON);
-  CHECK((tree->terms_cov == std::unordered_set<int> {24,25,26}));
+  CHECK(std::abs(tree->cost_sc - tree->to_tree()->cost - 0.2) < EPSILON); // include 1->11 but 11->2
+  CHECK(std::abs(tree->to_tree()->cost_trimmed() - (tree->cost_sc-0.2*2)) < EPSILON);
+  CHECK((tree->terms == std::unordered_set<int> {24,25,26}));
 }
 
 
@@ -148,10 +148,10 @@ TEST_CASE("cycles") {
   CHECK(dt.naive_alg()->cost_sc == 2+4);
   CHECK(dt.naive_alg()->cost == 2+2);
   auto tree = dt.level2_alg();
-  CHECK(tree->cost == 2+2);
+  CHECK(tree->to_tree()->cost == 2+2);
   // CHECK(tree->cost_sc == 2+4); // pick 2 and then 4
   CHECK(tree->cost_sc == 4); // pick 2 only
-  CHECK((tree->terms_cov == std::unordered_set<int> {6,7}));
+  CHECK((tree->terms == std::unordered_set<int> {6,7}));
 }
 
 
@@ -176,13 +176,13 @@ TEST_CASE("level2_alg") {
   CHECK(dt.naive_alg()->cost_sc == 1*3 + 2*3);
 
   auto tree = dt.level2_alg();
-  CHECK(tree->cost == 2.5 + 1*3);
+  CHECK(tree->to_tree()->cost == 2.5 + 1*3);
   CHECK(tree->cost_sc == 2.5 + 1*3);
-  CHECK((tree->terms_cov == std::unordered_set<int> {14,15,16}));
+  CHECK((tree->terms == std::unordered_set<int> {14,15,16}));
 
   tree = dt.level2_co_alg();
-  CHECK(tree->cost == 2.5 + 1*3);
+  CHECK(tree->to_tree()->cost == 2.5 + 1*3);
   CHECK(tree->cost_sc == 2.5 + 1*3);
-  CHECK((tree->terms_cov == std::unordered_set<int> {14,15,16}));
+  CHECK((tree->terms == std::unordered_set<int> {14,15,16}));
 }
 

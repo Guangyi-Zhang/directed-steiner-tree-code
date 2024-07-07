@@ -222,9 +222,10 @@ namespace dst {
       for (auto &p: *(cosssp.distances_t)) {
         sssp_nodes_visited += p.second->size();
       }
-      auto res = par->to_tree(trace_r, cosssp.trace_t);
-      res->debuginfo["sssp_nodes_visited"] = std::to_string(sssp_nodes_visited);
-      return res;
+      par->debuginfo["sssp_nodes_visited"] = std::to_string(sssp_nodes_visited);
+      par->trace_r = trace_r;
+      par->trace_t = cosssp.trace_t;
+      return par;
     }
 
 
@@ -296,9 +297,10 @@ namespace dst {
       for (auto &p: *dists_t) {
         sssp_nodes_visited += p.second->size();
       }
-      auto res = par->to_tree(trace_r, trace_t);
-      res->debuginfo["sssp_nodes_visited"] = std::to_string(sssp_nodes_visited);
-      return res;
+      par->debuginfo["sssp_nodes_visited"] = std::to_string(sssp_nodes_visited);
+      par->trace_r = trace_r;
+      par->trace_t = trace_t;
+      return par;
     }
 
 
