@@ -15,7 +15,7 @@
 #include <tuple>
 
 #include "tests/test_level2.cpp"
-//#include "tests/test_level3.cpp"
+#include "tests/test_level3.cpp"
 
 
 TEST_CASE("DST") {

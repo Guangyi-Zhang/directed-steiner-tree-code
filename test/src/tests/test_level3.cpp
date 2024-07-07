@@ -53,13 +53,13 @@ TEST_CASE("level3_alg") {
   CHECK(tree_naive->cost == (2 + 2*2) * 2);
 
   auto tree2 = dt.level2_alg();
-  CHECK(tree2->cost == (2 + 2*2) * 2);
+  CHECK(tree2->to_tree()->cost == (2 + 2*2) * 2);
   CHECK(tree2->cost_sc == (2 + 2*2) * 2);
-  CHECK((tree2->terms_cov == std::unordered_set<int> {25,26,27,28}));
+  CHECK((tree2->terms == std::unordered_set<int> {25,26,27,28}));
 
-  auto tree3 = dt.level3_alg_outdated(0.99);
-  CHECK(tree3->cost == 4 + 2*1.5 + 4*1);
+  auto tree3 = dt.level3_alg_naive();
+  CHECK(tree3->to_tree()->cost == 4 + 2*1.5 + 4*1);
   CHECK(tree3->cost_sc == 4 + 2*1.5 + 4*1);
-  CHECK((tree3->terms_cov == std::unordered_set<int> {25,26,27,28}));
+  CHECK((tree3->terms == std::unordered_set<int> {25,26,27,28}));
 }
 

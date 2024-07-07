@@ -309,6 +309,98 @@ namespace dst {
     }
 
 
+    auto level3_alg_naive() {
+      // pre-compute dijkstra
+      // dijktra from the root
+      auto [dists_r, trace_r] = dijkstra(adj, w, root);
+      // dijkstra from each u
+      auto trace_u = std::make_shared<std::unordered_map<int, std::shared_ptr<std::unordered_map<int,int>>>>();
+      auto dists_u = std::make_shared<std::unordered_map<int, std::shared_ptr<std::unordered_map<int,double>>>>();
+      for (auto u: V) {
+        if (not has_key(*dists_r, u))
+          continue;
+        auto [dists_, trace_] = dijkstra(adj, w, u);
+        (*dists_u)[u] = dists_; 
+        (*trace_u)[u] = trace_;
+      }
+      // backward dijktra from each terminal
+      auto trace_t = std::make_shared<std::unordered_map<int, std::shared_ptr<std::unordered_map<int,int>>>>();
+      auto dists_t = std::make_shared<std::unordered_map<int, std::shared_ptr<std::unordered_map<int,double>>>>();
+      for (auto t: terms_dm) {
+        if (not has_key(*dists_r, t))
+          continue;
+        auto [dists_, trace_] = dijkstra(adj_r, w, t, true);
+        (*dists_t)[t] = dists_; 
+        (*trace_t)[t] = trace_;
+      }
+
+      std::unordered_set<int> terms_left(terms_dm.begin(), terms_dm.end());
+      auto tree3 = std::make_shared<PartialTreeManager> (root);
+      // iterative add 3-level partial trees
+      while (terms_left.size() > 0) {
+        std::shared_ptr<PartialTreeManager> best = nullptr;
+
+        for (auto u: V) {
+          if (not has_key(*dists_r, u))
+            continue;
+          auto dists_uv = dists_u->at(u);
+          auto tree_u = std::make_shared<PartialTreeManager> (root, u, dists_r->at(u));
+          std::unordered_set<int> terms_left_u(terms_left.begin(), terms_left.end());
+
+          // iterative add 2-level partial trees
+          while (terms_left_u.size() > 0) {
+            std::shared_ptr<PartialTree> tree2_u = nullptr;
+            for (auto v: V) {
+              if (v == u or v == root or not has_key(*dists_uv, v))
+                continue;
+              auto tree2_uv = level2_through_v(u, v, dists_uv->at(v), dists_t, terms_left_u);
+              if (tree2_u == nullptr or tree2_u->density() > tree2_uv->density())
+                tree2_u = tree2_uv;
+            }
+            if (tree2_u == nullptr or tree2_u->terms.size() == 0)
+              break;
+
+            double den_new = (tree_u->cost_sc + tree2_u->cost_sc) / 
+              (terms_left.size() - terms_left_u.size() + tree2_u->terms.size());
+            if (terms_left.size() > terms_left_u.size()) { // skip 1st iteration
+              double den_u = tree_u->cost_sc / (terms_left.size() - terms_left_u.size());
+              if (den_u <= den_new)
+                break;
+            }
+
+            // merge tree2_u
+            tree_u->append(tree2_u);
+            if (best == nullptr or best->density() > tree_u->density()) {
+              best = tree_u;
+            }
+            for (auto t: tree2_u->terms) {
+              terms_left_u.erase(t);
+            }
+          }
+        }
+
+        if (best == nullptr or best->terms.size() == 0)
+          break;
+        for (auto t: best->terms)
+          terms_left.erase(t);
+        tree3->append(best);
+      }
+
+      int sssp_nodes_visited = dists_r->size();
+      for (auto &p: *dists_t) {
+        sssp_nodes_visited += p.second->size();
+      }
+      for (auto &p: *dists_u) {
+        sssp_nodes_visited += p.second->size();
+      }
+      tree3->debuginfo["sssp_nodes_visited"] = std::to_string(sssp_nodes_visited);
+      tree3->trace_r = trace_r;
+      tree3->trace_u = trace_u;
+      tree3->trace_t = trace_t;
+      return tree3;
+    }
+
+
     auto naive_alg() {
       auto [dists, trace] = dijkstra(adj, w, root, false, terms_dm);
 
