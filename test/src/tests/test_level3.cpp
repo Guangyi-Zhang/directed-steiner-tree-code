@@ -13,6 +13,87 @@
 #include <tuple>
 
 
+TEST_CASE("stop_picking_next_2partree") {
+  using namespace dst;
+
+  std::vector<std::pair<int,int>> edges {std::make_pair(0,1), 
+                                         std::make_pair(0,2), 
+
+                                         std::make_pair(1,11), 
+                                         std::make_pair(1,12), 
+                                         std::make_pair(2,13), 
+                                         std::make_pair(2,14), 
+
+                                         std::make_pair(11,21), 
+                                         std::make_pair(11,22), 
+                                         std::make_pair(12,23), 
+                                         std::make_pair(12,24),
+                                         std::make_pair(13,25), 
+                                         std::make_pair(13,26), 
+                                         std::make_pair(14,27), 
+                                         std::make_pair(14,28), 
+                                         };
+  std::vector<double> weights {1,1, 1,1,1,1, 1,1,1,1,1,1,0.9,100};
+  std::vector<int> terms {21,22,23,24,25,26,27,28};
+  DST dt = DST(edges, weights, 0, terms);
+
+  auto tree_naive = dt.naive_alg();
+  CHECK(tree_naive->cost_sc == 3*6+2.9+2+100);
+  CHECK(tree_naive->cost == 2+4+6.9+100);
+
+  auto tree2 = dt.level2_alg(); // pick 11-14 as root 
+  CHECK(tree2->to_tree()->cost == 2+4+6.9+100);
+  CHECK(tree2->cost_sc == (1+1+2) * 3 + 2.9 + 2+100);
+
+  /*
+  next u 1, costsc 7, cov 4
+  next u 2, costsc 5.9, cov 3
+  next u 14, costsc 102, cov 1
+  */
+  auto tree3 = dt.level3_alg_naive();
+  CHECK(tree3->to_tree()->cost == 2+4+6.9+100);
+  CHECK(tree3->cost_sc == (1+2+4) + (4+1.9) + 2+100);
+}
+
+
+TEST_CASE("two_3level_partrees") {
+  using namespace dst;
+
+  std::vector<std::pair<int,int>> edges {std::make_pair(0,1), 
+                                         std::make_pair(0,2), 
+
+                                         std::make_pair(1,11), 
+                                         std::make_pair(1,12), 
+                                         std::make_pair(2,13), 
+                                         std::make_pair(2,14), 
+
+                                         std::make_pair(11,21), 
+                                         std::make_pair(11,22), 
+                                         std::make_pair(12,23), 
+                                         std::make_pair(12,24),
+                                         std::make_pair(13,25), 
+                                         std::make_pair(13,26), 
+                                         std::make_pair(14,27), 
+                                         std::make_pair(14,28), 
+                                         };
+  std::vector<double> weights {1,1, 1,1,1,1, 1,1,1,1,1,1,1,1};
+  std::vector<int> terms {21,22,23,24,25,26,27,28};
+  DST dt = DST(edges, weights, 0, terms);
+
+  auto tree_naive = dt.naive_alg();
+  CHECK(tree_naive->cost_sc == 3*8);
+  CHECK(tree_naive->cost == 2+4+8);
+
+  auto tree2 = dt.level2_alg(); // pick 11-14 as root 
+  CHECK(tree2->to_tree()->cost == 2+4+8);
+  CHECK(tree2->cost_sc == (1+1+2) * 4);
+
+  auto tree3 = dt.level3_alg_naive();
+  CHECK(tree3->to_tree()->cost == 2+4+8);
+  CHECK(tree3->cost_sc == 2 * (1+2+4));
+}
+
+
 TEST_CASE("level3_alg") {
   using namespace dst;
   /*

@@ -341,7 +341,7 @@ namespace dst {
         std::shared_ptr<PartialTreeManager> best = nullptr;
 
         for (auto u: V) {
-          if (not has_key(*dists_r, u))
+          if (u == root or not has_key(*dists_r, u))
             continue;
           auto dists_uv = dists_u->at(u);
           auto tree_u = std::make_shared<PartialTreeManager> (root, u, dists_r->at(u));
