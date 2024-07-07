@@ -124,9 +124,9 @@ TEST_CASE("crossing") {
 
   CHECK(dt.naive_alg()->cost == 4+4+2-1);
   CHECK(dt.naive_alg()->cost_sc == 4+4+2);
-  auto tree = dt.level2_alg();
+  auto tree = dt.level2_alg(); // first pick 2->23, and then 1->{21,22}
   CHECK(tree->cost_sc == 2+(1+3+0.2*2+3));
-  CHECK(std::abs(tree->cost - tree->cost_sc) < EPSILON);
+  CHECK(std::abs(tree->cost_sc - tree->cost - 0.2) < EPSILON); // include 1->11 but 11->2
   CHECK(std::abs(tree->cost_trimmed() - (tree->cost_sc-0.2*2)) < EPSILON);
   CHECK((tree->terms_cov == std::unordered_set<int> {24,25,26}));
 }

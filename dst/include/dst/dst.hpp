@@ -133,20 +133,21 @@ namespace dst {
       }
 
       // define what to do after finding a greedy partial tree
-      auto par = std::make_shared<Tree> (r);
+      auto par = std::make_shared<PartialTreeManager> (r);
       int v_best {NONVERTEX};
       CoordinatedDijkstra cosssp {adj_r, w, terms_cand, true}; // dijktra from each terminal
-      auto add_greedy = [&] (std::shared_ptr<PartialTree> tree_best) {
-        if (DEBUG) fmt::println("level2 greedy through {}, d_rv={}, cov={}, density={}", tree_best->v, tree_best->d_rv, tree_best->terms, tree_best->density());
-        auto best = tree_best->to_tree(trace_r, cosssp.trace_t);
-        for (auto t: best->terms_cov) {
+      auto add_greedy = [&] (std::shared_ptr<PartialTree> best_) {
+        auto best = std::make_shared<PartialTree>();
+        *best = *best_; // copy
+        if (DEBUG) fmt::println("level2 greedy through {}, d_rv={}, cov={}, density={}", best->v, best->d_rv, best->terms, best->density());
+        for (auto t: best->terms) {
           cosssp.delete_source(t);
         }
         for (auto v: V_cand) {
           if (not has_key(*dists_r, v))
             continue;
           auto tree_v = trees.at(v);
-          tree_v->erase_and_reset(best->terms_cov);
+          tree_v->erase_and_reset(best->terms);
           LBs.insert(tree_v);
         }
         par->append(best);
@@ -154,7 +155,7 @@ namespace dst {
       };
 
       // iteratively add 2-level greedy partial trees
-      while (terms_cand.size() > par->terms_cov.size()) {
+      while (terms_cand.size() > par->terms.size()) {
         auto [t, v, d_vt] = cosssp.next();
         if (t == NONVERTEX) { // run out of next()
           for (auto &p: trees) {
@@ -192,7 +193,7 @@ namespace dst {
         auto tree_best = trees.at(v_best);
 
         // update LB and compare with UB
-        if (leq(tree_best->density(), tree_v->density_LB(terms_cand.size() - par->terms_cov.size())))
+        if (leq(tree_best->density(), tree_v->density_LB(terms_cand.size() - par->terms.size())))
           LBs.erase(tree_v);
         else {
           LBs.erase(tree_v);
@@ -205,7 +206,7 @@ namespace dst {
 
         // found a greedy partial tree
         if (not tree_best->is_ready(d_vt) and  // until full construction
-            tree_best->terms.size() < (terms_cand.size() - par->terms_cov.size()))
+            tree_best->terms.size() < (terms_cand.size() - par->terms.size()))
           // 1. wait for full construction
           // 2. v_best has reached all remaining terminals
           // 3. some terminals are not reachable
@@ -221,8 +222,9 @@ namespace dst {
       for (auto &p: *(cosssp.distances_t)) {
         sssp_nodes_visited += p.second->size();
       }
-      par->debuginfo["sssp_nodes_visited"] = std::to_string(sssp_nodes_visited);
-      return par;
+      auto res = par->to_tree(trace_r, cosssp.trace_t);
+      res->debuginfo["sssp_nodes_visited"] = std::to_string(sssp_nodes_visited);
+      return res;
     }
 
 
@@ -256,7 +258,7 @@ namespace dst {
       }
 
       // iteratively add 2-level partial trees
-      auto par = std::make_shared<Tree> (r);
+      auto par = std::make_shared<PartialTreeManager> (r);
       int v_best_ {NONVERTEX};
       std::unordered_set<int> terms_left(terms_cand.begin(), terms_cand.end());
       while (terms_left.size() > 0) {
@@ -287,15 +289,16 @@ namespace dst {
         if (DEBUG) fmt::println("level2_rooted_at_{}: #terms_left={}, best v={} and density={} and cov={}", r, terms_left.size(), v_best_, best->density(), best->terms);
         for (auto t: best->terms)
           terms_left.erase(t);
-        par->append(best->to_tree(trace_r, trace_t));
+        par->append(best);
       }
 
       int sssp_nodes_visited = dists_r->size();
       for (auto &p: *dists_t) {
         sssp_nodes_visited += p.second->size();
       }
-      par->debuginfo["sssp_nodes_visited"] = std::to_string(sssp_nodes_visited);
-      return par;
+      auto res = par->to_tree(trace_r, trace_t);
+      res->debuginfo["sssp_nodes_visited"] = std::to_string(sssp_nodes_visited);
+      return res;
     }
 
 

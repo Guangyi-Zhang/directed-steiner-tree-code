@@ -18,7 +18,7 @@ namespace dst {
     double d_rv;
 
     std::unordered_set<int> terms;
-    std::unordered_map<int, double> distances_v; // b/w v and terms
+    std::unordered_map<int, double> distances_t;
     std::list<int> terms_after_ready;
     double cost_sc = 0;
     double distance_lastly_added = 0;
@@ -37,7 +37,7 @@ namespace dst {
     }
 
     void add_term(int t, double d_vt) {
-      distances_v[t] = d_vt;
+      distances_t[t] = d_vt;
       double new_den = (cost_sc + d_vt) / (terms.size() + 1);
       if (ready or lq(density(), new_den)) {
         ready = true;
@@ -54,7 +54,7 @@ namespace dst {
         if (not has_key(terms, t))
           continue;
         terms.erase(t);
-        cost_sc -= distances_v.at(t);
+        cost_sc -= distances_t.at(t);
       }
 
       // reset
@@ -69,7 +69,7 @@ namespace dst {
         if (has_key(terms_del, t)) 
           continue;
 
-        add_term(t, distances_v.at(t));
+        add_term(t, distances_t.at(t));
         if (ready) 
           terms_after_ready.push_front(t);
       }
@@ -88,6 +88,7 @@ namespace dst {
     double density() {
       if (density_ > 0) 
         return density_;
+
       if (terms.size() == 0)
         return std::numeric_limits<double>::max();
       return cost_sc / terms.size();
@@ -113,11 +114,65 @@ namespace dst {
       auto tree = std::make_shared<Tree> (root);
       tree->add_arc(std::make_pair(root, v), d_rv, trace_r);
       for (auto t: terms) {
-        tree->add_arc(std::make_pair(v, t), distances_v.at(t), trace_t->at(t), true, true);
+        tree->add_arc(std::make_pair(v, t), distances_t.at(t), trace_t->at(t), true, true);
       }
       return tree;
     }
+  };
 
+
+  class PartialTreeManager {
+    // can be used a 3-level partial tree if u != NONVERTEX
+    public:
+    int root {NONVERTEX}; 
+    int u {NONVERTEX}; // the root has a single child
+    double d_ru;
+    std::vector<std::shared_ptr<PartialTree>> subtrees;
+
+    double cost_sc = 0;
+    std::unordered_set<int> terms;
+
+    PartialTreeManager() {};
+
+    PartialTreeManager(int r) : root {r} {};
+
+    PartialTreeManager(int r, int u, double d_ru) : 
+        root {r}, u {u}, d_ru {d_ru}, cost_sc {d_ru} {};
+
+    double density() {
+      if (terms.size() == 0)
+        return std::numeric_limits<double>::max();
+      return cost_sc / terms.size();
+    }
+
+    void append(std::shared_ptr<PartialTree> tree) {
+      subtrees.push_back(tree);
+      cost_sc += tree->cost_sc;
+      for (auto t: tree->terms)
+        terms.insert(t);
+    }
+
+    auto to_tree (
+        const std::shared_ptr<std::unordered_map<int,int>> trace_r, 
+        const std::shared_ptr<std::unordered_map<int, std::shared_ptr<std::unordered_map<int,int>>>> trace_t,
+        const std::shared_ptr<std::unordered_map<int, std::shared_ptr<std::unordered_map<int,int>>>> trace_u = nullptr
+    ) {
+      auto tree = std::make_shared<Tree> (root);
+
+      if (u != NONVERTEX) {
+        tree->add_arc(std::make_pair(root, u), d_ru, trace_r);
+        // TODO
+      } else {
+        for (auto tree2: subtrees) {
+          tree->add_arc(std::make_pair(root, tree2->v), tree2->d_rv, trace_r);
+          for (auto t: tree2->terms) {
+            tree->add_arc(std::make_pair(tree2->v, t), tree2->distances_t.at(t), trace_t->at(t), true, true);
+          }
+        }
+      }
+
+      return tree;
+    }
   };
 
 } // namespace dst

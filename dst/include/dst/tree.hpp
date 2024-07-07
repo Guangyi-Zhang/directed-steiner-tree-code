@@ -38,7 +38,6 @@ namespace dst {
 
     int root;
     double cost {0}, cost_sc {0};
-    std::unordered_map<int,int> trace_sc; // trace "short-cut" chosen 2-level trees
     std::unordered_map<int,int> trace;
     std::unordered_set<int> terms_cov;
 
@@ -47,7 +46,6 @@ namespace dst {
     Tree(int root) : 
         root {root} {
       trace[root] = NONVERTEX;
-      trace_sc[root] = NONVERTEX;
     }
 
     void add_arc(
@@ -61,13 +59,13 @@ namespace dst {
       if (is_terminal)
         terms_cov.insert(arc.second);
 
-      trace_sc[arc.second] = arc.first;
       cost_sc += w_arc;
 
       auto v = reverse? arc.first: arc.second;
       while (trace_arc->at(v) != NONVERTEX) {
         auto e = reverse? std::make_pair(v, trace_arc->at(v)) : 
                           std::make_pair(trace_arc->at(v), v);
+        if(DEBUG) fmt::println("{}<-{}, {}", e.first, e.second, not has_key(trace, e.second));
         if (not has_key(trace, e.second)) {
           cost += Tree::w->at(e);
           trace[e.second] = e.first;
@@ -83,42 +81,6 @@ namespace dst {
           break;
         }
         v = trace_arc->at(v);
-      }
-    }
-
-    void append(std::shared_ptr<Tree> tree) {
-      // append either r-u-{v}-{t}, or u-{v}-{r}
-      cost_sc += tree->cost_sc; // ok to count (u,v) multi times
-      auto es = edges();
-      auto es_from_tree = tree->edges();
-      for (auto &e: *es_from_tree) {
-        if (not has_key(*es, e)) {
-          cost += Tree::w->at(e);
-        }
-      }
-
-      for (auto t: tree->terms_cov) {
-        terms_cov.insert(t);
-      }
-
-      for (auto &p: tree->trace_sc) {
-        // won't happen: u->v and w->v
-        // may happen: -1->u in tree while r->u
-        if (not has_key(trace_sc, p.first))
-          trace_sc[p.first] = p.second;
-      }
-      for (auto &p: tree->trace) {
-        if (not has_key(trace, p.first))
-          trace[p.first] = p.second;
-        else {
-          if (p.second == NONVERTEX or p.second == trace[p.first]) {
-            // this is fine
-          } else {
-            // there exist cycles containing u->root->v or non-tree crosing,
-            // ok to shortcut but remember to prune disconnected dangling arcs w/o terminals
-            if (DEBUG) fmt::println("append: arc ({},{}) while arc ({},{}) in tree", p.second, p.first, trace[p.first], p.first);
-          }
-        }
       }
     }
 
@@ -150,6 +112,7 @@ namespace dst {
 
     std::unordered_map<int, TreeNode> to_treenode() const 
     {
+      // TODO: made into pointer
       std::unordered_map<int, TreeNode> v2nd;
 
       for (auto t: terms_cov) {
