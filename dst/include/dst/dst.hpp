@@ -21,7 +21,7 @@
 #include <dst/consts.hpp>
 #include <dst/utils.hpp>
 #include <dst/tree.hpp>
-#include <dst/tree2.hpp>
+#include <dst/partree.hpp>
 #include <dst/dijkstra.hpp>
 
 
@@ -71,7 +71,7 @@ namespace dst {
         w[{t, t_dm}] = 0;
       }
 
-      PartialTree::w = &w;
+      Tree::w = &w;
     }
 
 
@@ -94,7 +94,7 @@ namespace dst {
       }
 
       // sort distances from v to t's
-      auto tree = std::make_shared<Level2PartialTree> (r, v, d_rv);
+      auto tree = std::make_shared<PartialTree> (r, v, d_rv);
       auto &&idxs = argsort(ds_vt);
       for (size_t i=0; i < ds_vt.size(); i++) {
         auto idx = idxs[i];
@@ -119,24 +119,24 @@ namespace dst {
       // dijktra from the root
       auto [dists_r, trace_r] = dijkstra(adj, w, r);
 
-      // init a Level2PartialTree for each v
-      std::unordered_map<int, std::shared_ptr<Level2PartialTree>> trees;
-      auto cmp_level2 = [](std::shared_ptr<Level2PartialTree> a, std::shared_ptr<Level2PartialTree> b) { 
+      // init a PartialTree for each v
+      std::unordered_map<int, std::shared_ptr<PartialTree>> trees;
+      auto cmp_level2 = [](std::shared_ptr<PartialTree> a, std::shared_ptr<PartialTree> b) { 
         return a->density() < b->density(); 
       };
-      std::set<std::shared_ptr<Level2PartialTree>, decltype(cmp_level2)> LBs(cmp_level2); // a set as balanced binary-tree to sort LBs
+      std::set<std::shared_ptr<PartialTree>, decltype(cmp_level2)> LBs(cmp_level2); // a set as balanced binary-tree to sort LBs
       for (auto v: V_cand) {
         if (not has_key(*dists_r, v))
           continue;
-        trees[v] = std::make_shared<Level2PartialTree> (r, v, dists_r->at(v));
+        trees[v] = std::make_shared<PartialTree> (r, v, dists_r->at(v));
         LBs.insert(trees.at(v));
       }
 
       // define what to do after finding a greedy partial tree
-      auto par = std::make_shared<PartialTree> (r);
+      auto par = std::make_shared<Tree> (r);
       int v_best {NONVERTEX};
       CoordinatedDijkstra cosssp {adj_r, w, terms_cand, true}; // dijktra from each terminal
-      auto add_greedy = [&] (std::shared_ptr<Level2PartialTree> tree_best) {
+      auto add_greedy = [&] (std::shared_ptr<PartialTree> tree_best) {
         if (DEBUG) fmt::println("level2 greedy through {}, d_rv={}, cov={}, density={}", tree_best->v, tree_best->d_rv, tree_best->terms, tree_best->density());
         auto best = tree_best->to_tree(trace_r, cosssp.trace_t);
         for (auto t: best->terms_cov) {
@@ -184,7 +184,7 @@ namespace dst {
             tree_v->terms.size() > tree_best_old->terms.size())) {
           v_best = v;
 
-          auto tmp = std::make_shared<Level2PartialTree> (tree_v->density()); // a fake tree
+          auto tmp = std::make_shared<PartialTree> (tree_v->density()); // a fake tree
           for (auto it = LBs.upper_bound(tmp); it != LBs.end(); ) {
             it = LBs.erase(it);
           }
@@ -256,12 +256,12 @@ namespace dst {
       }
 
       // iteratively add 2-level partial trees
-      auto par = std::make_shared<PartialTree> (r);
+      auto par = std::make_shared<Tree> (r);
       int v_best_ {NONVERTEX};
       std::unordered_set<int> terms_left(terms_cand.begin(), terms_cand.end());
       while (terms_left.size() > 0) {
         // enum all v as the middle vertex in a 2-level tree
-        std::shared_ptr<Level2PartialTree> best = nullptr;
+        std::shared_ptr<PartialTree> best = nullptr;
         for (auto v: V_cand) {
           if (not has_key(*dists_r, v) or r == v)
             continue;
@@ -308,7 +308,7 @@ namespace dst {
       auto [dists, trace] = dijkstra(adj, w, root, false, terms_dm);
 
       // take the union of all paths from root to t's
-      auto tree = std::make_shared<PartialTree> (root);
+      auto tree = std::make_shared<Tree> (root);
       for (auto t: terms_dm) {
         if (not has_key(*trace, t))
             continue; // disconnected graph

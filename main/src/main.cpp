@@ -52,12 +52,12 @@ auto main(int argc, char** argv) -> int {
   std::string version {"v5"}; // @20240707: everything by pointers
   int rep {1};
 
-  std::string method {"naive"};
-  //std::string method {"level2"};
+  //std::string method {"naive"};
+  std::string method {"level2"};
   //std::string method {"level2co"};
 
   double alpha = 0.5;
-  std::string dataset {"random_graph_5000.csv"};
+  std::string dataset {"random_graph_500.csv"};
   //std::string dataset {"soc-Epinions1.txt"};
 
   // load data
@@ -128,7 +128,7 @@ auto main(int argc, char** argv) -> int {
 
   DST dt = DST(edges, weights, root, terms);
 
-  auto tree = std::shared_ptr<PartialTree> (0);
+  auto tree = std::shared_ptr<Tree> (0);
   if (method.compare("naive") == 0) {
     auto tree_naive = dt.naive_alg();
     tree = tree_naive;
@@ -142,8 +142,8 @@ auto main(int argc, char** argv) -> int {
     tree = tree2;
   }
   else if (method.compare("level3") == 0) {
-    auto tree3 = dt.level3_alg_outdated(alpha);
-    tree = tree3;
+    //auto tree3 = dt.level3_alg_outdated(alpha);
+    //tree = tree3;
   }
   else {
     std::cerr << "unknown method: " << method << std::endl;

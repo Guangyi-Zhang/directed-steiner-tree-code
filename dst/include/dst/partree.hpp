@@ -11,7 +11,7 @@
 
 namespace dst {
 
-  class Level2PartialTree {
+  class PartialTree {
     public:
     int root {NONVERTEX}; 
     int v {NONVERTEX}; // the root has a single child
@@ -25,14 +25,14 @@ namespace dst {
     double density_ = -1; // fake density
     bool ready = false; 
 
-    Level2PartialTree() {};
+    PartialTree() {};
 
-    Level2PartialTree(int root, int v, double d_rv) : 
+    PartialTree(int root, int v, double d_rv) : 
         root {root}, v {v}, d_rv {d_rv}, cost_sc {d_rv} {
       ;
     }
 
-    Level2PartialTree(double density) : density_ {density} {
+    PartialTree(double density) : density_ {density} {
       ; // construct a fake tree with a specific density
     }
 
@@ -110,7 +110,7 @@ namespace dst {
         const std::shared_ptr<std::unordered_map<int,int>> trace_r, 
         const std::shared_ptr<std::unordered_map<int, std::shared_ptr<std::unordered_map<int,int>>>> trace_t
     ) {
-      auto tree = std::make_shared<PartialTree> (root);
+      auto tree = std::make_shared<Tree> (root);
       tree->add_arc(std::make_pair(root, v), d_rv, trace_r);
       for (auto t: terms) {
         tree->add_arc(std::make_pair(v, t), distances_v.at(t), trace_t->at(t), true, true);

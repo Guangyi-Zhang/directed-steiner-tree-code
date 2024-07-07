@@ -32,7 +32,7 @@ namespace dst {
   };
 
 
-  class PartialTree {
+  class Tree {
   public:
     static const std::unordered_map<std::pair<int,int>, double, boost::hash<std::pair<int,int>>>* w; 
 
@@ -44,7 +44,7 @@ namespace dst {
 
     std::unordered_map<std::string, std::string> debuginfo;
 
-    PartialTree(int root) : 
+    Tree(int root) : 
         root {root} {
       trace[root] = NONVERTEX;
       trace_sc[root] = NONVERTEX;
@@ -56,7 +56,7 @@ namespace dst {
         const std::shared_ptr<std::unordered_map<int,int>> trace_arc, 
         bool reverse=false,
         bool is_terminal=false) {
-      // start from PartialTree(root), arcs must be added from top-down
+      // start from Tree(root), arcs must be added from top-down
       // i.e., arc.first must exist already beforehand
       if (is_terminal)
         terms_cov.insert(arc.second);
@@ -69,7 +69,7 @@ namespace dst {
         auto e = reverse? std::make_pair(v, trace_arc->at(v)) : 
                           std::make_pair(trace_arc->at(v), v);
         if (not has_key(trace, e.second)) {
-          cost += PartialTree::w->at(e);
+          cost += Tree::w->at(e);
           trace[e.second] = e.first;
         }
         else if (reverse) {
@@ -86,14 +86,14 @@ namespace dst {
       }
     }
 
-    void append(std::shared_ptr<PartialTree> tree) {
+    void append(std::shared_ptr<Tree> tree) {
       // append either r-u-{v}-{t}, or u-{v}-{r}
       cost_sc += tree->cost_sc; // ok to count (u,v) multi times
       auto es = edges();
       auto es_from_tree = tree->edges();
       for (auto &e: *es_from_tree) {
         if (not has_key(*es, e)) {
-          cost += PartialTree::w->at(e);
+          cost += Tree::w->at(e);
         }
       }
 
@@ -188,7 +188,7 @@ namespace dst {
       fmt::print(prefix);
       fmt::print(is_last_child ? "└──" : "├──");
       if (pa != NONVERTEX)
-        fmt::println("{} ({:05.1f})", v, PartialTree::w->at(std::make_pair(pa, v)));
+        fmt::println("{} ({:05.1f})", v, Tree::w->at(std::make_pair(pa, v)));
       else
         fmt::println("{}", v);
       size_t i = 0;
@@ -206,12 +206,12 @@ namespace dst {
       double sum {0};
       auto es = edges();
       for (const auto &e: *es) {
-        sum += PartialTree::w->at(e);
+        sum += Tree::w->at(e);
       }
       return sum;
     }
   };
 
-  const std::unordered_map<std::pair<int,int>, double, boost::hash<std::pair<int,int>>>* PartialTree::w = nullptr; 
+  const std::unordered_map<std::pair<int,int>, double, boost::hash<std::pair<int,int>>>* Tree::w = nullptr; 
 
 } // namespace dst

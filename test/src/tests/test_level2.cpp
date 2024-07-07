@@ -55,13 +55,13 @@ TEST_CASE("level2_co_alg") {
 
 
 
-TEST_CASE("Level2PartialTree") {
+TEST_CASE("PartialTree") {
   using namespace dst;
 
   int root {0}, v {1};
   double d_rv {1};
   int k = 5;
-  Level2PartialTree tree {root, v, d_rv};
+  PartialTree tree {root, v, d_rv};
   CHECK(not tree.is_ready());
   CHECK(tree.density() > 1e8);
   CHECK(tree.density_LB(k) < 0);
@@ -91,7 +91,7 @@ TEST_CASE("Level2PartialTree") {
   CHECK(eq(tree.density_LB(k), tree.density()));
   CHECK(tree.terms.size() == 2);
 
-  Level2PartialTree tree2 {0.5};
+  PartialTree tree2 {0.5};
   CHECK(eq(tree2.density(), 0.5));
 }
 
