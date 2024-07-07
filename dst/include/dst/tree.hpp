@@ -86,27 +86,28 @@ namespace dst {
       }
     }
 
-    void append(PartialTree &tree) {
+    void append(std::shared_ptr<PartialTree> tree) {
       // append either r-u-{v}-{t}, or u-{v}-{r}
-      cost_sc += tree.cost_sc; // ok to count (u,v) multi times
+      cost_sc += tree->cost_sc; // ok to count (u,v) multi times
       auto es = edges();
-      for (auto &e: tree.edges()) {
-        if (not has_key(es, e)) {
+      auto es_from_tree = tree->edges();
+      for (auto &e: *es_from_tree) {
+        if (not has_key(*es, e)) {
           cost += PartialTree::w->at(e);
         }
       }
 
-      for (auto t: tree.terms_cov) {
+      for (auto t: tree->terms_cov) {
         terms_cov.insert(t);
       }
 
-      for (auto &p: tree.trace_sc) {
+      for (auto &p: tree->trace_sc) {
         // won't happen: u->v and w->v
         // may happen: -1->u in tree while r->u
         if (not has_key(trace_sc, p.first))
           trace_sc[p.first] = p.second;
       }
-      for (auto &p: tree.trace) {
+      for (auto &p: tree->trace) {
         if (not has_key(trace, p.first))
           trace[p.first] = p.second;
         else {
@@ -131,15 +132,15 @@ namespace dst {
       return terms_cov.size() == 0 ? true: false;
     }
 
-    std::unordered_set<std::pair<int,int>, boost::hash<std::pair<int,int>>> 
-    edges() const {
-      // TODO: made into pointer
-      std::unordered_set<std::pair<int,int>, boost::hash<std::pair<int,int>>> es;
+    std::shared_ptr<std::unordered_set<std::pair<int,int>, boost::hash<std::pair<int,int>>>> 
+    edges() const
+    {
+      auto es = std::make_shared<std::unordered_set<std::pair<int,int>, boost::hash<std::pair<int,int>>>> ();
 
       for (auto t: terms_cov) {
         int v {t};
         while (trace.at(v) != NONVERTEX) {
-          es.insert(std::make_pair(trace.at(v), v));
+          es->insert(std::make_pair(trace.at(v), v));
           v = trace.at(v);
         }
       }
@@ -147,7 +148,8 @@ namespace dst {
       return es;
     }
 
-    std::unordered_map<int, TreeNode> to_treenode() const {
+    std::unordered_map<int, TreeNode> to_treenode() const 
+    {
       std::unordered_map<int, TreeNode> v2nd;
 
       for (auto t: terms_cov) {
@@ -202,8 +204,8 @@ namespace dst {
     double cost_trimmed() const {
       // exclude dangling arcs
       double sum {0};
-      auto &&es = edges();
-      for (const auto &e: es) {
+      auto es = edges();
+      for (const auto &e: *es) {
         sum += PartialTree::w->at(e);
       }
       return sum;

@@ -48,18 +48,18 @@ TEST_CASE("level3_alg") {
   std::vector<int> terms {21,22,23,24};
   DST dt = DST(edges, weights, 0, terms);
 
-  auto &&tree_naive = dt.naive_alg();
-  CHECK(tree_naive.cost_sc == (2+2) * 4);
-  CHECK(tree_naive.cost == (2 + 2*2) * 2);
+  auto tree_naive = dt.naive_alg();
+  CHECK(tree_naive->cost_sc == (2+2) * 4);
+  CHECK(tree_naive->cost == (2 + 2*2) * 2);
 
-  auto &&tree2 = dt.level2_alg();
-  CHECK(tree2.cost == (2 + 2*2) * 2);
-  CHECK(tree2.cost_sc == (2 + 2*2) * 2);
-  CHECK((tree2.terms_cov == std::unordered_set<int> {25,26,27,28}));
+  auto tree2 = dt.level2_alg();
+  CHECK(tree2->cost == (2 + 2*2) * 2);
+  CHECK(tree2->cost_sc == (2 + 2*2) * 2);
+  CHECK((tree2->terms_cov == std::unordered_set<int> {25,26,27,28}));
 
-  auto &&tree3 = dt.level3_alg_outdated(0.99);
-  CHECK(tree3.cost == 4 + 2*1.5 + 4*1);
-  CHECK(tree3.cost_sc == 4 + 2*1.5 + 4*1);
-  CHECK((tree3.terms_cov == std::unordered_set<int> {25,26,27,28}));
+  auto tree3 = dt.level3_alg_outdated(0.99);
+  CHECK(tree3->cost == 4 + 2*1.5 + 4*1);
+  CHECK(tree3->cost_sc == 4 + 2*1.5 + 4*1);
+  CHECK((tree3->terms_cov == std::unordered_set<int> {25,26,27,28}));
 }
 

@@ -106,17 +106,18 @@ namespace dst {
       return ready;
     }
 
-    PartialTree to_tree (
+    auto to_tree (
         const std::shared_ptr<std::unordered_map<int,int>> trace_r, 
         const std::shared_ptr<std::unordered_map<int, std::shared_ptr<std::unordered_map<int,int>>>> trace_t
     ) {
-      PartialTree tree {root};
-      tree.add_arc(std::make_pair(root, v), d_rv, trace_r);
+      auto tree = std::make_shared<PartialTree> (root);
+      tree->add_arc(std::make_pair(root, v), d_rv, trace_r);
       for (auto t: terms) {
-        tree.add_arc(std::make_pair(v, t), distances_v.at(t), trace_t->at(t), true, true);
+        tree->add_arc(std::make_pair(v, t), distances_v.at(t), trace_t->at(t), true, true);
       }
       return tree;
     }
+
   };
 
 } // namespace dst

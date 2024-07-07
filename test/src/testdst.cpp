@@ -34,8 +34,8 @@ TEST_CASE("DST") {
 
   CHECK(dt.terms_dm == (std::unordered_set<int> {6,7,8}));
   
-  CHECK(dt.naive_alg().cost == 1+1+2-1);
-  CHECK(dt.naive_alg().cost_sc == 1+1+2);
+  CHECK(dt.naive_alg()->cost == 1+1+2-1);
+  CHECK(dt.naive_alg()->cost_sc == 1+1+2);
 }
 
 
