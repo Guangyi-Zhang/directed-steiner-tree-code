@@ -314,14 +314,11 @@ namespace dst {
       // dijktra from the root
       auto [dists_r, trace_r] = dijkstra(adj, w, root);
       // dijkstra from each u
-      auto trace_u = std::make_shared<std::unordered_map<int, std::shared_ptr<std::unordered_map<int,int>>>>();
-      auto dists_u = std::make_shared<std::unordered_map<int, std::shared_ptr<std::unordered_map<int,double>>>>();
+      std::unordered_map<int, Dijkstra> sssp_u;
       for (auto u: V) {
         if (not has_key(*dists_r, u))
           continue;
-        auto [dists_, trace_] = dijkstra(adj, w, u);
-        (*dists_u)[u] = dists_; 
-        (*trace_u)[u] = trace_;
+        sssp_u[u] = std::move(Dijkstra(adj, w, u));
       }
       // backward dijktra from each terminal
       auto trace_t = std::make_shared<std::unordered_map<int, std::shared_ptr<std::unordered_map<int,int>>>>();
@@ -343,7 +340,7 @@ namespace dst {
         for (auto u: V) {
           if (u == root or not has_key(*dists_r, u))
             continue;
-          auto dists_uv = dists_u->at(u);
+          auto &sssp = sssp_u.at(u);
           auto tree_u = std::make_shared<PartialTreeManager> (root, u, dists_r->at(u));
           std::unordered_set<int> terms_left_u(terms_left.begin(), terms_left.end());
 
@@ -351,9 +348,18 @@ namespace dst {
           while (terms_left_u.size() > 0) {
             std::shared_ptr<PartialTree> tree2_u = nullptr;
             for (auto v: V) {
-              if (v == u or v == root or not has_key(*dists_uv, v))
+              if (v == u or v == root)
                 continue;
-              auto tree2_uv = level2_through_v(u, v, dists_uv->at(v), dists_t, terms_left_u);
+              while (not has_key(*(sssp.distances), v)) {
+                // even after reaching all v, most pq has huge amount left
+                auto [z, d_uz] = sssp.next();
+                if (z == NONVERTEX)
+                  break;
+              }
+              if (not has_key(*(sssp.distances), v))
+                continue;
+
+              auto tree2_uv = level2_through_v(u, v, sssp.distances->at(v), dists_t, terms_left_u);
               if (tree2_u == nullptr or tree2_u->density() > tree2_uv->density())
                 tree2_u = tree2_uv;
             }
@@ -390,8 +396,10 @@ namespace dst {
       for (auto &p: *dists_t) {
         sssp_nodes_visited += p.second->size();
       }
-      for (auto &p: *dists_u) {
-        sssp_nodes_visited += p.second->size();
+      auto trace_u = std::make_shared<std::unordered_map<int, std::shared_ptr<std::unordered_map<int,int>>>>();
+      for (auto &p: sssp_u) {
+        sssp_nodes_visited += p.second.distances->size();
+        (*trace_u)[p.first] = p.second.trace;
       }
       tree3->debuginfo["sssp_nodes_visited"] = std::to_string(sssp_nodes_visited);
       tree3->trace_r = trace_r;
@@ -409,7 +417,7 @@ namespace dst {
       auto trace_u = std::make_shared<std::unordered_map<int, std::shared_ptr<std::unordered_map<int,int>>>>();
       auto dists_u = std::make_shared<std::unordered_map<int, std::shared_ptr<std::unordered_map<int,double>>>>();
       for (auto u: V) {
-        if (not has_key(*dists_r, u))
+        if (u == root or not has_key(*dists_r, u))
           continue;
         auto [dists_, trace_] = dijkstra(adj, w, u);
         (*dists_u)[u] = dists_; 

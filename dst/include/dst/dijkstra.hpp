@@ -59,6 +59,69 @@ namespace dst {
   }
 
 
+  class Dijkstra {
+    public:
+    const std::unordered_map<int, std::vector<int>> *padj {nullptr};
+    const std::unordered_map<std::pair<int,int>, double, boost::hash<std::pair<int,int>>> *pedgeweight {nullptr};
+    int source;
+    bool reverse=false;
+
+    std::shared_ptr<std::unordered_map<int,double>> distances;
+    std::shared_ptr<std::unordered_map<int,int>> trace;
+    std::priority_queue<std::tuple<double,int,int>, 
+                        std::vector<std::tuple<double,int,int>>, 
+                        std::greater<std::tuple<double,int,int>>> pq;
+
+    Dijkstra() {};
+
+    Dijkstra(
+        const std::unordered_map<int, std::vector<int>> &adj, 
+        const std::unordered_map<std::pair<int,int>, double, boost::hash<std::pair<int,int>>> &edgeweight, 
+        int source,
+        bool reverse=false) :
+        padj {&adj}, pedgeweight {&edgeweight}, source {source}, reverse {reverse} 
+    {
+      distances = std::make_shared<std::unordered_map<int,double>>();
+      trace = std::make_shared<std::unordered_map<int,int>>();
+      pq.emplace(0, NONVERTEX, source);
+    }
+
+    std::tuple<int,double> next() {
+      while (not pq.empty()) {
+        double d_u;
+        int u_prev, u; 
+        std::tie(d_u, u_prev, u) = pq.top();
+        pq.pop();
+
+        if (has_key(*distances, u)) 
+          continue;
+
+        (*distances)[u] = d_u;
+        (*trace)[u] = u_prev;
+
+        if (not has_key(*padj, u))
+          continue;
+
+        for (const auto& v: padj->at(u)) {
+          if (has_key(*distances, v)) 
+            continue;
+          double weight = reverse? pedgeweight->at({v,u}) : pedgeweight->at({u,v});
+          pq.emplace(d_u + weight, u, v);
+        }
+
+        return std::make_tuple(u, d_u); // break
+      }
+
+      // nothing to return
+      return std::make_tuple(NONVERTEX, -1);
+    }
+
+  }; // end of class
+
+
+  /*
+    Coordindated SSSP's, one from each terminal
+  */
   class CoordinatedDijkstra {
     public:
     const std::unordered_map<int, std::vector<int>> *padj {nullptr};

@@ -53,6 +53,10 @@ TEST_CASE("stop_picking_next_2partree") {
   auto tree3 = dt.level3_alg_naive();
   CHECK(tree3->to_tree()->cost == 2+4+6.9+100);
   CHECK(tree3->cost_sc == (1+2+4) + (4+1.9) + 2+100);
+
+  auto fast3 = dt.level3_alg();
+  CHECK(fast3->to_tree()->cost == 2+4+6.9+100);
+  CHECK(fast3->cost_sc == (1+2+4) + (4+1.9) + 2+100);
 }
 
 
@@ -142,5 +146,10 @@ TEST_CASE("level3_alg") {
   CHECK(tree3->to_tree()->cost == 4 + 2*1.5 + 4*1);
   CHECK(tree3->cost_sc == 4 + 2*1.5 + 4*1);
   CHECK((tree3->terms == std::unordered_set<int> {25,26,27,28}));
+
+  auto fast3 = dt.level3_alg();
+  CHECK(fast3->to_tree()->cost == 4 + 2*1.5 + 4*1);
+  CHECK(fast3->cost_sc == 4 + 2*1.5 + 4*1);
+  CHECK((fast3->terms == std::unordered_set<int> {25,26,27,28}));
 }
 

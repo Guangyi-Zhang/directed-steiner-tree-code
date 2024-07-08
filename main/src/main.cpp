@@ -53,11 +53,13 @@ auto main(int argc, char** argv) -> int {
   int rep {1};
 
   //std::string method {"naive"};
-  std::string method {"level2"};
+  //std::string method {"level2"};
   //std::string method {"level2co"};
+  std::string method {"level3naive"};
+  //std::string method {"level3"};
 
   double alpha = 0.5;
-  std::string dataset {"random_graph_500.csv"};
+  std::string dataset {"random_graph_1000.csv"};
   //std::string dataset {"soc-Epinions1.txt"};
 
   // load data
@@ -145,9 +147,15 @@ auto main(int argc, char** argv) -> int {
     tree = partree->to_tree();
     debuginfo = &(partree->debuginfo);
   }
+  else if (method.compare("level3naive") == 0) {
+    partree = dt.level3_alg_naive();
+    tree = partree->to_tree();
+    debuginfo = &(partree->debuginfo);
+  }
   else if (method.compare("level3") == 0) {
-    //auto tree3 = dt.level3_alg_outdated(alpha);
-    //tree = tree3;
+    partree = dt.level3_alg();
+    tree = partree->to_tree();
+    debuginfo = &(partree->debuginfo);
   }
   else {
     std::cerr << "unknown method: " << method << std::endl;
