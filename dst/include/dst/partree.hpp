@@ -4,6 +4,7 @@
 #include <memory>
 #include <unordered_set>
 #include <unordered_map>
+#include <set>
 #include <list>
 
 #include <dst/tree.hpp>
@@ -211,5 +212,100 @@ namespace dst {
       return tree;
     }
   };
+
+
+  struct TableCell {
+    int nterm;
+    double d_rv_UB, cost_terms;
+
+    TableCell(double d_rv_UB, double cost_terms, int nterm) : 
+        nterm {nterm}, d_rv_UB {d_rv_UB}, cost_terms {cost_terms} {
+    };
+  };
+
+  class PartialTreeTable {
+    // delete and partree take O(k) time
+    public:
+    int v {NONVERTEX}; // the root has a single child
+    std::vector<std::pair<int,double>> term_ds;
+    std::vector<std::shared_ptr<TableCell>> cells;
+
+    PartialTreeTable(int v) : v {v} {};
+
+    void add_term(int t, double d_vt) {
+      term_ds.push_back(std::make_pair(t, d_vt));
+    }
+
+    void build(bool sorted=false) {
+      assert(term_ds.size() > 0);
+
+      if (not sorted) {
+        std::sort(
+          term_ds.begin(),
+          term_ds.end(),
+          [](const std::pair<int,double> &a,  
+            const std::pair<int,double> &b) { 
+            return a.second < b.second;
+          }
+        );  
+      }
+
+      int i = 1;
+      auto it = term_ds.begin(); 
+      double sum = it->second, avg = it->second;
+      for (it++, i++; it != term_ds.end(); it++, i++) {
+        double sum_new = sum + it->second;
+        double avg_new = sum_new / i;
+        double thr = (avg_new - avg) * (i-1) * i; // may be zero
+        cells.push_back(std::make_shared<TableCell> (thr, sum, i-1));
+        sum = sum_new;
+        avg = avg_new;
+      }
+      cells.push_back(std::make_shared<TableCell> (std::numeric_limits<double>::max(), sum, i-1));
+    }
+
+    auto find(double d_rv) {
+      // fist cell that is greater than d_rv, so include as many t's as possible
+      // include all terms w/ zero thr as long as d_rv > 0
+      auto tar = std::make_shared<TableCell> (d_rv, 0, 0);
+      auto idx = std::upper_bound(cells.begin(), cells.end(), tar,
+        [](const std::shared_ptr<TableCell> a, const std::shared_ptr<TableCell> b) { 
+          return a->d_rv_UB < b->d_rv_UB;
+        }
+      );
+      if (idx == cells.end())
+        return *(cells.rbegin());
+      return *idx;
+    }
+
+    double density(double d_rv) {
+      auto cell = find(d_rv);
+      return (d_rv + cell->cost_terms) / cell->nterm;
+    }
+
+    auto partree(int root, double d_rv) {
+      // no need to find(d_rv)
+      auto par = std::make_shared<PartialTree> (root, v, d_rv);
+      for (auto it = term_ds.begin(); it != term_ds.end(); it++) {
+        par->add_term(it->first, it->second);
+      }
+      return par;
+    }
+
+    void erase(const std::unordered_set<int> &terms_del) {
+      // delete v's from term_ds, and rebuild thresholds
+      std::vector<std::pair<int,double>> tds;
+      for (auto &p : term_ds) {
+        if (has_key(terms_del, p.first))
+          continue;
+        tds.push_back(p);
+      }
+
+      term_ds = std::move(tds);
+      cells.clear();
+      build(true);
+    }
+  };
+
 
 } // namespace dst

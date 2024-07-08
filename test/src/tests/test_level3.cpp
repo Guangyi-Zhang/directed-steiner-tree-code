@@ -2,6 +2,7 @@
 #include "dst/dst.hpp"
 #include "dst/dijkstra.hpp"
 #include "dst/utils.hpp"
+#include "dst/partree.hpp"
 
 #include <iostream>
 #include <string>
@@ -11,6 +12,58 @@
 #include <unordered_map>
 #include <utility>
 #include <tuple>
+
+
+TEST_CASE("PartialTreeTable") {
+  using namespace dst;
+
+  PartialTreeTable tb (10);
+  tb.add_term(13, 1.4);
+  tb.add_term(11, 1);
+  tb.add_term(12, 1);
+  tb.add_term(14, 4);
+  tb.build();
+
+  CHECK(tb.cells.size() == 4);
+  CHECK(eq(tb.cells[0]->d_rv_UB, 0));
+  CHECK(tb.find(0.1) == tb.cells[1]);
+  CHECK(tb.find(0.79) == tb.cells[1]);
+  CHECK(tb.find(0.81) == tb.cells[2]);
+  CHECK(tb.find(1) == tb.cells[2]);
+  CHECK(tb.find(8.59) == tb.cells[2]);
+  CHECK(tb.find(8.61) == tb.cells[3]);
+  CHECK(eq(tb.density(0), 1));
+  CHECK(eq(tb.density(0.8), 1.4));
+  CHECK(eq(tb.density(8.6), 4));
+  CHECK(eq(tb.density(10.6), (10.6+1+1+1.4+4)/4));
+
+  PartialTreeTable tb2 (10);
+  tb2.add_term(11, 1);
+  tb2.add_term(12, 1);
+  tb2.add_term(13, 1);
+  tb2.add_term(14, 1);
+  tb2.build();
+
+  CHECK(tb2.cells.size() == 4);
+  CHECK(eq(tb2.cells[0]->d_rv_UB, 0));
+  CHECK(tb2.cells[3]->d_rv_UB > 0);
+  CHECK(tb2.find(0.1) == tb2.cells[3]);
+  CHECK(tb2.find(100) == tb2.cells[3]);
+
+  PartialTreeTable tb3 (10);
+  tb3.add_term(11, 1);
+  tb3.add_term(12, 2);
+  tb3.add_term(13, 3);
+  tb3.add_term(14, 4);
+  tb3.build();
+
+  CHECK(tb3.cells.size() == 4);
+  CHECK(eq(tb3.cells[0]->d_rv_UB, (1.5-1)*2));
+
+  tb3.erase({11,13});
+  CHECK(tb3.cells.size() == 2);
+  CHECK(eq(tb3.cells[0]->d_rv_UB, (3-2)*2));
+}
 
 
 TEST_CASE("stop_picking_next_2partree") {
