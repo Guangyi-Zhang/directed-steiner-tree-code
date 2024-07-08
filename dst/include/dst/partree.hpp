@@ -130,10 +130,8 @@ namespace dst {
       return ready;
     }
 
-    auto to_tree (
-        const std::shared_ptr<std::unordered_map<int,int>> trace_r, 
-        const std::shared_ptr<std::unordered_map<int, std::shared_ptr<std::unordered_map<int,int>>>> trace_t
-    ) {
+    auto to_tree () {
+      // TODO: test
       auto tree = std::make_shared<Tree> (root);
       tree->add_arc(std::make_pair(root, v), d_rv, trace_r);
       for (auto t: terms) {
