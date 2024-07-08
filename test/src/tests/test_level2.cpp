@@ -54,6 +54,38 @@ TEST_CASE("level2_co_alg") {
 }
 
 
+TEST_CASE("PartialTree2") {
+  using namespace dst;
+
+  int root {0}, v {1};
+  double d_rv {1};
+  int k = 5;
+  PartialTree tree {root, v, d_rv};
+  CHECK(not tree.is_ready());
+  CHECK(tree.density() > 1e8);
+  CHECK(tree.density_LB(k) < 0);
+
+  tree.add_term(11, 1); // density = 2/1
+  CHECK(eq(tree.density_LB(k), (1.0+k)/k));
+  tree.add_term(12, 2); // density = 4/2
+  CHECK(not tree.is_ready());
+  CHECK(eq(tree.density_LB(k), (1.0+1+(k-1)*2)/k));
+  tree.add_term(13, 4); // density = 8/3
+  CHECK(tree.is_ready());
+  CHECK(eq(tree.density(), 2));
+  CHECK(eq(tree.density_LB(k), tree.density()));
+  CHECK(tree.terms.size() == 2);
+  CHECK(tree.terms_after_ready.size() == 1);
+
+  tree.erase_and_reset({11}); // density = (1+2)/1
+  CHECK(tree.is_ready());
+  CHECK(eq(tree.density(), 3));
+  CHECK(eq(tree.density_LB(k), tree.density()));
+  CHECK(tree.terms.size() == 1);
+  CHECK(tree.terms_after_ready.size() == 1); 
+  CHECK(tree.terms_after_ready == std::list<int> {13}); 
+}
+
 
 TEST_CASE("PartialTree") {
   using namespace dst;

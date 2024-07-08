@@ -33,6 +33,9 @@ namespace dst {
   };
 
 
+  /*
+    2-level partial tree that supports density LB, terminal removal
+  */
   class PartialTree: public BasePartialTree {
     public:
     int v {NONVERTEX}; // the root has a single child
@@ -90,8 +93,10 @@ namespace dst {
           continue;
 
         add_term(t, distances_t.at(t));
-        if (ready) 
+        if (ready) {
+          terms_after_ready.pop_back();
           terms_after_ready.push_front(t);
+        }
       }
     }
 
