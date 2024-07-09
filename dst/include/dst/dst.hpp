@@ -372,35 +372,31 @@ namespace dst {
             std::shared_ptr<PartialTree> tree2_u = nullptr;
             double d_uv_max = 0;
 
-            // a subroutine to process a given v
-            auto try_each_v = [&](int v, double d_uv) {
-              if (v == u or v == root)
-                return;
+            // process prior reached v's
+            for (auto p: *(sssp.distances)) {
+              auto v = p.first; 
+              auto d_uv = p.second;
+              if (has_key(terms_dm, v) or v == u or v == root)
+                continue;
 
-              double den = tbls.at(v).density(d_uv); // a lower bound of true tree2_uv
-              if (tree2_u != nullptr and leq(tree2_u->density(), den))
-                return;
-
+              // TODO: update min-heap
               auto tree2_uv = level2_through_v(u, v, d_uv, dists_t, terms_left_u); // TODO: replaced by tbl.partree
               if (tree2_u == nullptr or tree2_u->density() > tree2_uv->density()) {
                 tree2_u = tree2_uv;
               }
-            };
-
-            // process prior reached v's
-            for (auto p: *(sssp.distances)) {
-              if (has_key(terms_dm, p.first))
-                continue;
-              try_each_v(p.first, p.second);
             }
+
             // process new v's
             while (true) { 
               // TODO: setup to_reach in sssp
               auto [v, d_uv] = sssp.next(); // even after reaching all v, most pq has huge amount left
               if (v == NONVERTEX)
                 break;
+              if (v == u or v == root)
+                continue;
 
               d_uv_max = std::max(d_uv, d_uv_max); 
+              // find the largest thr <= d_uv_max
               while (true) { // TODO: use exponential search
                 if (thr_idx == thr_mindens->size() - 1)
                   break;
@@ -411,13 +407,21 @@ namespace dst {
                 else
                   break;
               } 
+              // see if early-terminate sssp
               if (thr_idx >= 0) {
                 double denlb = (*thr_mindens)[thr_idx].second;
                 if (tree2_u != nullptr and leq(tree2_u->density(), denlb))
                   break;
               }
 
-              try_each_v(v, d_uv);
+              double den = tbls.at(v).density(d_uv); // a lower bound of true tree2_uv
+              if (tree2_u != nullptr and leq(tree2_u->density(), den))
+                continue; // TODO: remember to push its den into min-heap
+
+              auto tree2_uv = level2_through_v(u, v, d_uv, dists_t, terms_left_u); // TODO: replaced by tbl.partree
+              if (tree2_u == nullptr or tree2_u->density() > tree2_uv->density()) {
+                tree2_u = tree2_uv;
+              }
             }
 
             // criterion for refusing new tree2_u
