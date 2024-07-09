@@ -349,10 +349,10 @@ namespace dst {
       // pre-compute min-den among 2-level partrees for each d_uv threshold
       double thr_max = 0;
       for (auto &p: *dists_r) {
-        if (p.second > thr_max)
-          thr_max = p.second;
+        thr_max = std::max(thr_max, p.second);
       }
       auto thr_mindens = minden_by_thresholds(n_thresholds, thr_max, tbls);
+      int thr_idx = -1;
 
       std::unordered_set<int> terms_left(terms_dm.begin(), terms_dm.end());
       auto tree3 = std::make_shared<PartialTreeManager> (root);
@@ -384,7 +384,6 @@ namespace dst {
               auto tree2_uv = level2_through_v(u, v, d_uv, dists_t, terms_left_u); // TODO: replaced by tbl.partree
               if (tree2_u == nullptr or tree2_u->density() > tree2_uv->density()) {
                 tree2_u = tree2_uv;
-                //TODO: if (eq(tree2_u->density(), thr_mindens))
               }
             };
 
@@ -400,12 +399,30 @@ namespace dst {
               auto [v, d_uv] = sssp.next(); // even after reaching all v, most pq has huge amount left
               if (v == NONVERTEX)
                 break;
-              d_uv_max = std::max(d_uv, d_uv_max); // TODO
+
+              d_uv_max = std::max(d_uv, d_uv_max); 
+              while (true) { // TODO: use exponential search
+                if (thr_idx == thr_mindens->size() - 1)
+                  break;
+                double thr_next = (*thr_mindens)[thr_idx+1].first;
+                if (leq(thr_next, d_uv_max)) {
+                  thr_idx += 1;
+                }
+                else
+                  break;
+              } 
+              if (thr_idx >= 0) {
+                double denlb = (*thr_mindens)[thr_idx].second;
+                if (tree2_u != nullptr and leq(tree2_u->density(), denlb))
+                  break;
+              }
+
               try_each_v(v, d_uv);
             }
+
+            // criterion for refusing new tree2_u
             if (tree2_u == nullptr or tree2_u->terms.size() == 0)
               break;
-
             double den_new = (tree_u->cost_sc + tree2_u->cost_sc) / 
               (terms_left.size() - terms_left_u.size() + tree2_u->terms.size());
             if (terms_left.size() > terms_left_u.size()) { // skip 1st iteration

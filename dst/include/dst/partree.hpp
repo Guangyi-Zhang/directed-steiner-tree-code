@@ -333,7 +333,7 @@ namespace dst {
         for (auto &p: tbls) {
           auto v = p.first;
           double den = p.second.density(thr); 
-          pq_v.emplace(den, v, i);
+          pq_v.emplace(den, v, 1);
         }
       }
 
