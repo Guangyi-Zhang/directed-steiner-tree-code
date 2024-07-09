@@ -380,7 +380,7 @@ namespace dst {
                 continue;
 
               // TODO: update min-heap
-              auto tree2_uv = level2_through_v(u, v, d_uv, dists_t, terms_left_u); // TODO: replaced by tbl.partree
+              auto tree2_uv = tbls.at(v).partree(u, d_uv, &terms_left_u);
               if (tree2_u == nullptr or tree2_u->density() > tree2_uv->density()) {
                 tree2_u = tree2_uv;
               }
@@ -418,7 +418,7 @@ namespace dst {
               if (tree2_u != nullptr and leq(tree2_u->density(), den))
                 continue; // TODO: remember to push its den into min-heap
 
-              auto tree2_uv = level2_through_v(u, v, d_uv, dists_t, terms_left_u); // TODO: replaced by tbl.partree
+              auto tree2_uv = tbls.at(v).partree(u, d_uv, &terms_left_u);
               if (tree2_u == nullptr or tree2_u->density() > tree2_uv->density()) {
                 tree2_u = tree2_uv;
               }

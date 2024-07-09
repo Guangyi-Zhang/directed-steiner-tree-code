@@ -289,10 +289,12 @@ namespace dst {
       return (d_rv + cell->cost_terms) / cell->nterm;
     }
 
-    auto partree(int root, double d_rv) {
+    auto partree(int root, double d_rv, const std::unordered_set<int> *terms=nullptr) {
       // no need to find(d_rv)
       auto par = std::make_shared<PartialTree> (root, v, d_rv);
       for (auto it = term_ds.begin(); it != term_ds.end(); it++) {
+        if (terms != nullptr and not has_key(*terms, it->first))
+          continue;
         par->add_term(it->first, it->second);
       }
       return par;
