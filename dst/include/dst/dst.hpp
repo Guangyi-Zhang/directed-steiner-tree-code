@@ -316,7 +316,7 @@ namespace dst {
       // dijkstra from each u
       std::unordered_map<int, Dijkstra> sssp_u;
       for (auto u: V) {
-        if (not has_key(*dists_r, u))
+        if (u == root or not has_key(*dists_r, u))
           continue;
         sssp_u[u] = std::move(Dijkstra(adj, w, u));
       }
@@ -371,25 +371,37 @@ namespace dst {
           while (terms_left_u.size() > 0) {
             std::shared_ptr<PartialTree> tree2_u = nullptr;
             double d_uv_max = 0;
-            for (auto v: V) { // TODO: ordered by d_uv
-              if (v == u or v == root)
-                continue;
-              while (not has_key(*(sssp.distances), v)) {
-                // even after reaching all v, most pq has huge amount left
-                auto [z, d_uz] = sssp.next();
-                if (z == NONVERTEX)
-                  break;
-              }
-              if (not has_key(*(sssp.distances), v))
-                continue;
 
-              double den = tbls.at(v).density(sssp.distances->at(v)); // a lower bound of true tree2_uv
-              d_uv_max = std::max(sssp.distances->at(v), d_uv_max);
-              if (tree2_u == nullptr or tree2_u->density() > den) {
-                auto tree2_uv = level2_through_v(u, v, sssp.distances->at(v), dists_t, terms_left_u); // TODO: replaced by tbl.partree
+            // a subroutine to process a given v
+            auto try_each_v = [&](int v, double d_uv) {
+              if (v == u or v == root)
+                return;
+
+              double den = tbls.at(v).density(d_uv); // a lower bound of true tree2_uv
+              if (tree2_u != nullptr and leq(tree2_u->density(), den))
+                return;
+
+              auto tree2_uv = level2_through_v(u, v, d_uv, dists_t, terms_left_u); // TODO: replaced by tbl.partree
+              if (tree2_u == nullptr or tree2_u->density() > tree2_uv->density()) {
                 tree2_u = tree2_uv;
-                //if (eq(tree2_u->density(), thr_mindens))
+                //TODO: if (eq(tree2_u->density(), thr_mindens))
               }
+            };
+
+            // process prior reached v's
+            for (auto p: *(sssp.distances)) {
+              if (has_key(terms_dm, p.first))
+                continue;
+              try_each_v(p.first, p.second);
+            }
+            // process new v's
+            while (true) { 
+              // TODO: setup to_reach in sssp
+              auto [v, d_uv] = sssp.next(); // even after reaching all v, most pq has huge amount left
+              if (v == NONVERTEX)
+                break;
+              d_uv_max = std::max(d_uv, d_uv_max); // TODO
+              try_each_v(v, d_uv);
             }
             if (tree2_u == nullptr or tree2_u->terms.size() == 0)
               break;
@@ -421,6 +433,7 @@ namespace dst {
           p.second.erase(best->terms);
         }
         tree3->append(best);
+        if (DEBUG) fmt::println("add partree rooted at {}, cost_sc={}, #terms={}", best->u, best->cost_sc, best->terms.size());
       }
 
       int sssp_nodes_visited = dists_r->size();

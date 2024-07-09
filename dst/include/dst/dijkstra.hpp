@@ -95,7 +95,7 @@ namespace dst {
         pq.pop();
 
         if (has_key(*distances, u)) 
-          continue;
+          continue; // TODO: return std::make_tuple(NONVERTEX, d_u); 
 
         (*distances)[u] = d_u;
         (*trace)[u] = u_prev;
