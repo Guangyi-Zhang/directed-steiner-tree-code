@@ -309,7 +309,7 @@ namespace dst {
     }
 
 
-    auto level3_alg() {
+    auto level3_alg(int n_thresholds=10) {
       // pre-compute dijkstra
       // dijktra from the root
       auto [dists_r, trace_r] = dijkstra(adj, w, root);
@@ -346,6 +346,13 @@ namespace dst {
         tbl.build();
         tbls[v] = std::move(tbl);
       }
+      // pre-compute min-den among 2-level partrees for each d_uv threshold
+      double thr_max = 0;
+      for (auto &p: *dists_r) {
+        if (p.second > thr_max)
+          thr_max = p.second;
+      }
+      auto thr_mindens = minden_by_thresholds(n_thresholds, thr_max, tbls);
 
       std::unordered_set<int> terms_left(terms_dm.begin(), terms_dm.end());
       auto tree3 = std::make_shared<PartialTreeManager> (root);
@@ -363,7 +370,8 @@ namespace dst {
           // iterative add 2-level partial trees
           while (terms_left_u.size() > 0) {
             std::shared_ptr<PartialTree> tree2_u = nullptr;
-            for (auto v: V) {
+            double d_uv_max = 0;
+            for (auto v: V) { // TODO: ordered by d_uv
               if (v == u or v == root)
                 continue;
               while (not has_key(*(sssp.distances), v)) {
@@ -376,9 +384,11 @@ namespace dst {
                 continue;
 
               double den = tbls.at(v).density(sssp.distances->at(v)); // a lower bound of true tree2_uv
+              d_uv_max = std::max(sssp.distances->at(v), d_uv_max);
               if (tree2_u == nullptr or tree2_u->density() > den) {
-                auto tree2_uv = level2_through_v(u, v, sssp.distances->at(v), dists_t, terms_left_u);
+                auto tree2_uv = level2_through_v(u, v, sssp.distances->at(v), dists_t, terms_left_u); // TODO: replaced by tbl.partree
                 tree2_u = tree2_uv;
+                //if (eq(tree2_u->density(), thr_mindens))
               }
             }
             if (tree2_u == nullptr or tree2_u->terms.size() == 0)

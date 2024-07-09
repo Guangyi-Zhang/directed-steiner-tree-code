@@ -4,6 +4,7 @@
 #include <unordered_map>
 #include <unordered_set>
 #include <tuple>
+#include <queue>
 #include <vector>
 #include <list>
 #include <functional> // std::greater

@@ -315,4 +315,43 @@ namespace dst {
   };
 
 
+  auto minden_by_thresholds(
+      int n_thresholds, 
+      double thr_max,
+      std::unordered_map<int, PartialTreeTable> &tbls
+  ){
+    auto thr_mindens = std::make_shared<std::vector<std::pair<double,double>>> ();
+
+    std::priority_queue<std::tuple<double,int,int>, 
+                        std::vector<std::tuple<double,int,int>>, 
+                        std::greater<std::tuple<double,int,int>>> pq_v;
+    for (int i=1; i <= n_thresholds; i++) {
+      double thr = thr_max/n_thresholds * i;
+
+      // initialize pq_v with first density for each v
+      if (i == 1) {
+        for (auto &p: tbls) {
+          auto v = p.first;
+          double den = p.second.density(thr); 
+          pq_v.emplace(den, v, i);
+        }
+      }
+
+      // find min density for thr
+      while (true) {
+        auto [den, v, i_] = pq_v.top();
+        if (i == i_) {
+          thr_mindens->push_back(std::make_pair(thr, den));
+          break;
+        } else {
+          pq_v.pop();
+          double den = tbls.at(v).density(thr); 
+          pq_v.emplace(den, v, i);
+        }
+      }
+    }
+
+    return thr_mindens;
+  };
+
 } // namespace dst
