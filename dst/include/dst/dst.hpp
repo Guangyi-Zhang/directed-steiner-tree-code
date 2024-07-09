@@ -331,6 +331,22 @@ namespace dst {
         (*trace_t)[t] = trace_;
       }
 
+      // pre-compute low-level look-up table, one for each v in r-u-v-{t}
+      std::unordered_map<int, PartialTreeTable> tbls;
+      for (auto v: V) {
+        if (v == root)
+          continue;
+        PartialTreeTable tbl (v);
+        for (auto t: terms_dm) {
+          auto dists = dists_t->at(t);
+          if (not has_key(*dists, v))
+            continue;
+          tbl.add_term(t, dists->at(v));
+        }
+        tbl.build();
+        tbls[v] = std::move(tbl);
+      }
+
       std::unordered_set<int> terms_left(terms_dm.begin(), terms_dm.end());
       auto tree3 = std::make_shared<PartialTreeManager> (root);
       // iterative add 3-level partial trees
@@ -359,9 +375,11 @@ namespace dst {
               if (not has_key(*(sssp.distances), v))
                 continue;
 
-              auto tree2_uv = level2_through_v(u, v, sssp.distances->at(v), dists_t, terms_left_u);
-              if (tree2_u == nullptr or tree2_u->density() > tree2_uv->density())
+              double den = tbls.at(v).density(sssp.distances->at(v)); // a lower bound of true tree2_uv
+              if (tree2_u == nullptr or tree2_u->density() > den) {
+                auto tree2_uv = level2_through_v(u, v, sssp.distances->at(v), dists_t, terms_left_u);
                 tree2_u = tree2_uv;
+              }
             }
             if (tree2_u == nullptr or tree2_u->terms.size() == 0)
               break;
@@ -389,6 +407,9 @@ namespace dst {
           break;
         for (auto t: best->terms)
           terms_left.erase(t);
+        for (auto &p: tbls) {
+          p.second.erase(best->terms);
+        }
         tree3->append(best);
       }
 

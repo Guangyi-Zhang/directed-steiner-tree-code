@@ -230,6 +230,8 @@ namespace dst {
     std::vector<std::pair<int,double>> term_ds;
     std::vector<std::shared_ptr<TableCell>> cells;
 
+    PartialTreeTable() {};
+
     PartialTreeTable(int v) : v {v} {};
 
     void add_term(int t, double d_vt) {
@@ -237,7 +239,8 @@ namespace dst {
     }
 
     void build(bool sorted=false) {
-      assert(term_ds.size() > 0);
+      if (term_ds.size() == 0)
+        return;
 
       if (not sorted) {
         std::sort(
@@ -279,6 +282,9 @@ namespace dst {
     }
 
     double density(double d_rv) {
+      if (term_ds.size() == 0)
+        return std::numeric_limits<double>::max();
+
       auto cell = find(d_rv);
       return (d_rv + cell->cost_terms) / cell->nterm;
     }
@@ -301,6 +307,7 @@ namespace dst {
         tds.push_back(p);
       }
 
+      term_ds.clear();
       term_ds = std::move(tds);
       cells.clear();
       build(true);
