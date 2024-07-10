@@ -313,19 +313,29 @@ namespace dst {
       // pre-compute dijkstra
       // dijktra from the root
       auto [dists_r, trace_r] = dijkstra(adj, w, root);
+      std::vector<int> unreachables; // TODO: abstract for common use
+      for (auto u: V) {
+        if (not has_key(*dists_r, u))
+          unreachables.push_back(u);
+      }
+      for (auto u: unreachables)
+        V.erase(u);
+      unreachables.clear();
+      for (auto t: terms_dm) {
+        if (not has_key(*dists_r, t))
+          unreachables.push_back(t);
+      }
+      for (auto t: unreachables)
+        terms_dm.erase(t);
       // dijkstra from each u
       std::unordered_map<int, Dijkstra> sssp_u;
       for (auto u: V) {
-        if (u == root or not has_key(*dists_r, u))
-          continue;
         sssp_u[u] = std::move(Dijkstra(adj, w, u));
       }
       // backward dijktra from each terminal
       auto trace_t = std::make_shared<std::unordered_map<int, std::shared_ptr<std::unordered_map<int,int>>>>();
       auto dists_t = std::make_shared<std::unordered_map<int, std::shared_ptr<std::unordered_map<int,double>>>>();
       for (auto t: terms_dm) {
-        if (not has_key(*dists_r, t))
-          continue;
         auto [dists_, trace_] = dijkstra(adj_r, w, t, true);
         (*dists_t)[t] = dists_; 
         (*trace_t)[t] = trace_;
@@ -338,8 +348,6 @@ namespace dst {
                                              std::greater<std::tuple<double,int,double,int,std::shared_ptr<PartialTree>>>>
                         > Q;
       for(auto u: V) {
-        if (u == root or not has_key(*dists_r, u))
-          continue;
         Q[u] = std::priority_queue<std::tuple<double,int,double,int,std::shared_ptr<PartialTree>>, 
                                      std::vector<std::tuple<double,int,double,int,std::shared_ptr<PartialTree>>>, 
                                      std::greater<std::tuple<double,int,double,int,std::shared_ptr<PartialTree>>>> ();
@@ -348,8 +356,6 @@ namespace dst {
       // pre-compute low-level look-up table, one for each v in r-u-v-{t}
       std::unordered_map<int, PartialTreeTable> tbls;
       for (auto v: V) {
-        if (v == root)
-          continue;
         PartialTreeTable tbl (v);
         for (auto t: terms_dm) {
           auto dists = dists_t->at(t);
@@ -375,8 +381,6 @@ namespace dst {
         std::shared_ptr<PartialTreeManager> best = nullptr;
 
         for (auto u: V) {
-          if (u == root or not has_key(*dists_r, u))
-            continue;
           auto Q_u = &(Q.at(u));
           auto &sssp = sssp_u.at(u);
           auto tree_u = std::make_shared<PartialTreeManager> (root, u, dists_r->at(u));
@@ -432,7 +436,7 @@ namespace dst {
               auto [v, d_uv] = sssp.next(); // even after reaching all v, most pq has huge amount left
               if (v == NONVERTEX)
                 break;
-              if (v == u or v == root)
+              if (u != root and v == root)
                 continue;
 
               d_uv_max = std::max(d_uv, d_uv_max); 
@@ -479,6 +483,7 @@ namespace dst {
             }
 
             // merge tree2_u
+            if (DEBUG) fmt::println("u={} adds partree rooted at v={}, #terms={}", u, tree2_u->v, tree2_u->terms.size());
             tree_u->append(tree2_u->copy());
             if (best == nullptr or best->density() > tree_u->density()) {
               best = tree_u;
@@ -498,7 +503,7 @@ namespace dst {
           p.second.erase(best->terms);
         }
         tree3->append(best);
-        if (DEBUG) fmt::println("add partree rooted at {}, cost_sc={}, #terms={}", best->u, best->cost_sc, best->terms.size());
+        if (DEBUG) fmt::println("add partree r-u={}, cost_sc={}, #terms={}", best->u, best->cost_sc, best->terms.size());
       }
 
       int sssp_nodes_visited = dists_r->size();
@@ -526,7 +531,7 @@ namespace dst {
       auto trace_u = std::make_shared<std::unordered_map<int, std::shared_ptr<std::unordered_map<int,int>>>>();
       auto dists_u = std::make_shared<std::unordered_map<int, std::shared_ptr<std::unordered_map<int,double>>>>();
       for (auto u: V) {
-        if (u == root or not has_key(*dists_r, u))
+        if (not has_key(*dists_r, u))
           continue;
         auto [dists_, trace_] = dijkstra(adj, w, u);
         (*dists_u)[u] = dists_; 
@@ -550,7 +555,7 @@ namespace dst {
         std::shared_ptr<PartialTreeManager> best = nullptr;
 
         for (auto u: V) {
-          if (u == root or not has_key(*dists_r, u))
+          if (not has_key(*dists_r, u))
             continue;
           auto dists_uv = dists_u->at(u);
           auto tree_u = std::make_shared<PartialTreeManager> (root, u, dists_r->at(u));
@@ -560,7 +565,7 @@ namespace dst {
           while (terms_left_u.size() > 0) {
             std::shared_ptr<PartialTree> tree2_u = nullptr;
             for (auto v: V) {
-              if (v == u or v == root or not has_key(*dists_uv, v))
+              if ((u != root and v == root) or not has_key(*dists_uv, v))
                 continue;
               auto tree2_uv = level2_through_v(u, v, dists_uv->at(v), dists_t, terms_left_u);
               if (tree2_u == nullptr or tree2_u->density() > tree2_uv->density())
