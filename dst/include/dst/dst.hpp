@@ -327,7 +327,7 @@ namespace dst {
     }
 
 
-    auto level3_alg(int n_thresholds=10) {
+    auto level3_alg(double alpha=0.99, int n_thresholds=10) {
       // pre-compute dijkstra
       // dijktra from the root
       auto [dists_r, trace_r] = dijkstra_from_root_and_cleanup(root);
@@ -471,7 +471,11 @@ namespace dst {
                 double denlb = (*thr_mindens)[thr_idx].second;
                 if (tree2_u != nullptr and leq(tree2_u->density(), denlb))
                   break;
+                /***** key pruning *****/
                 if (leq(best->density(), denlb))
+                  break;
+                double tree_u_LB = (tree_u->cost_sc + denlb * (terms_dm.size() - tree_u->terms.size())) / terms_dm.size();
+                if (leq(best->density(), tree_u_LB))
                   break;
               }
 
