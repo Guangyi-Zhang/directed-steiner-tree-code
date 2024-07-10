@@ -138,9 +138,9 @@ TEST_CASE("stop_picking_next_2partree") {
   CHECK(tree3->cost_sc == (1+2+4) + (4+1.9) + 2+100);
 
   auto fast3 = dt.level3_alg();
-  CHECK(fast3->to_tree()->cost == 2+4+6.9+100);
   //CHECK(fast3->cost_sc == (1+2+4) + (4+1.9) + 2+100);
   CHECK(fast3->cost_sc == (1+2*4) + (4+1.9) + 2+100); // this is fine
+  CHECK(fast3->to_tree()->cost == 2+4+6.9+100);
 }
 
 

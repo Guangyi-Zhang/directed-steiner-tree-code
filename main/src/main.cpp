@@ -36,30 +36,42 @@ auto main(int argc, char** argv) -> int {
 
   // read parameters
   cxxopts::Options options(*argv, "DST");
-  std::string buildtype;
 
   options.add_options()
     ("h,help", "Show help")
-    ("b,buildtype", "CMAKE_BUILD_TYPE", cxxopts::value(buildtype)->default_value("unknown"))
+    ("b,buildtype", "CMAKE_BUILD_TYPE", cxxopts::value<std::string>()->default_value("unknown"))
+    ("m,method", "method", cxxopts::value<std::string>()->default_value("naive"))
+    ("d,dataset", "dataset", cxxopts::value<std::string>()->default_value("random_graph_wFalse_p01_1000.csv"))
+    ("r,rep", "rep", cxxopts::value<int>()->default_value("1"))
   ;
   auto opresult = options.parse(argc, argv);
+
 
   // parameters
   // std::string version {"v1"}; // @20240616: testing
   //std::string version {"v2"}; // @20240624: start making level2 faster
   //std::string version {"v3"}; // @20240628: level2_co_alg ready
   //std::string version {"v4"}; // @20240705: start making level3 faster
-  std::string version {"v5"}; // @20240707: everything by pointers
-  int rep {1};
+  //std::string version {"v5"}; // @20240707: everything by pointers
+  //std::string version {"v6"}; // @20240710: pq for PartialTrees
+  std::string version {"v7"}; // @20240710: start pruning
+
+  std::string buildtype = opresult["buildtype"].as<std::string>();
+  std::string method = opresult["method"].as<std::string>();
+  std::string dataset = opresult["dataset"].as<std::string>();
+  int rep = opresult["rep"].as<int>();
 
   //std::string method {"naive"};
   //std::string method {"level2"};
   //std::string method {"level2co"};
-  std::string method {"level3naive"};
+  //std::string method {"level3naive"};
   //std::string method {"level3"};
 
   double alpha = 0.5;
-  std::string dataset {"random_graph_1000.csv"};
+  //std::string dataset {"random_graph_wTrue_p01_1000.csv"};
+  //std::string dataset {"random_graph_wFalse_p01_1000.csv"};
+  //std::string dataset {"random_graph_wFalse_p002_1000.csv"};
+  //std::string dataset {"random_graph_wTrue_p002_1000.csv"};
   //std::string dataset {"soc-Epinions1.txt"};
 
   // load data
@@ -113,7 +125,7 @@ auto main(int argc, char** argv) -> int {
     terms = {7270, 860, 5390, 5191, 5734, 6265, 466, 4426, 5578, 8322};
   if (dataset.compare("random_graph_5000.csv") == 0)
     terms = {860, 3772, 3092, 466, 4426, 3444, 3171, 2919, 130, 1685};
-  if (dataset.compare("random_graph_1000.csv") == 0)
+  if (dataset.find("1000.csv") != std::string::npos)
     terms = {102, 435, 860, 270, 106, 71, 700, 20, 614, 121};
   if (dataset.compare("random_graph_100.csv") == 0)
     terms = {51, 92, 14, 71, 60, 20, 82, 86, 74, 74};

@@ -210,7 +210,17 @@ namespace dst {
       } else {
         // building r->{u}->{v}-{t}
         for (auto tree3: trees) {
-          to_tree3(tree3.get());
+          if (tree3->u != NONVERTEX) {
+            to_tree3(tree3.get());
+          } else {
+            // appended 2-level to a manage w/ u
+            for (auto tree2: tree3->subtrees) {
+              tree->add_arc(std::make_pair(root, tree2->v), tree2->d_rv, trace_r);
+              for (auto t: tree2->terms) {
+                tree->add_arc(std::make_pair(tree2->v, t), tree2->distances_t.at(t), trace_t->at(t), true, true);
+              }
+            }
+          }
         }
 
         // building r->{v}-{t}

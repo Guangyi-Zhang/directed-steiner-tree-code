@@ -382,8 +382,19 @@ namespace dst {
       auto tree3 = std::make_shared<PartialTreeManager> (root);
       // ***** iterative add 3-level partial trees *****
       while (terms_left.size() > 0) {
-        std::shared_ptr<PartialTreeManager> best = nullptr;
+        // ***** best 2-level partree as initial UB *****
+        auto best = std::make_shared<PartialTreeManager> (root);
+        std::shared_ptr<PartialTree> best2 = nullptr;
+        for (auto v: V) {
+          auto tree2_rv = level2_through_v(root, v, dists_r->at(v), dists_t, terms_left);
+          if (best2 == nullptr or best2->density() > tree2_rv->density())
+            best2 = tree2_rv;
+        }
+        if (best2 == nullptr or best2->terms.size() == 0)
+          break;
+        best->append(best2);
 
+        // ***** find the best 3-level partree *****
         for (auto u: V) {
           auto Q_u = &(Q.at(u));
           auto &sssp = sssp_u.at(u);
@@ -416,7 +427,7 @@ namespace dst {
                 tree2_u = tree2_uv;
               }
             }
-            else if (not Q_u->empty()){
+            else if (not Q_u->empty()){ // TODO: extra Q to keep updated partrees
               auto [den, niter, d_uv, v, tree2_uv] = Q_u->top();
               while(niter != niter_u) {
                 Q_u->pop();
@@ -459,6 +470,8 @@ namespace dst {
               if (thr_idx >= 0) {
                 double denlb = (*thr_mindens)[thr_idx].second;
                 if (tree2_u != nullptr and leq(tree2_u->density(), denlb))
+                  break;
+                if (leq(best->density(), denlb))
                   break;
               }
 
