@@ -75,6 +75,30 @@ namespace dst {
     }
 
 
+    auto dijkstra_from_root_and_cleanup(int root) {
+      // remove unreachble vertices and terminals
+      auto [dists_r, trace_r] = dijkstra(adj, w, root);
+
+      std::vector<int> unreachables;
+      for (auto u: V) {
+        if (not has_key(*dists_r, u))
+          unreachables.push_back(u);
+      }
+      for (auto u: unreachables)
+        V.erase(u);
+
+      unreachables.clear();
+      for (auto t: terms_dm) {
+        if (not has_key(*dists_r, t))
+          unreachables.push_back(t);
+      }
+      for (auto t: unreachables)
+        terms_dm.erase(t);
+
+      return std::make_tuple(dists_r, trace_r);
+    }
+
+
     auto level2_through_v(
         int r,
         int v, 
@@ -117,7 +141,7 @@ namespace dst {
         const std::unordered_set<int> &terms_cand
     ) {
       // dijktra from the root
-      auto [dists_r, trace_r] = dijkstra(adj, w, r);
+      auto [dists_r, trace_r] = dijkstra_from_root_and_cleanup(r);
 
       // init a PartialTree for each v
       std::unordered_map<int, std::shared_ptr<PartialTree>> trees;
@@ -126,8 +150,6 @@ namespace dst {
       };
       std::set<std::shared_ptr<PartialTree>, decltype(cmp_level2)> LBs(cmp_level2); // a set as balanced binary-tree to sort LBs
       for (auto v: V_cand) {
-        if (not has_key(*dists_r, v))
-          continue;
         trees[v] = std::make_shared<PartialTree> (r, v, dists_r->at(v));
         LBs.insert(trees.at(v));
       }
@@ -144,8 +166,6 @@ namespace dst {
           cosssp.delete_source(t);
         }
         for (auto v: V_cand) {
-          if (not has_key(*dists_r, v))
-            continue;
           auto tree_v = trees.at(v);
           tree_v->erase_and_reset(best->terms);
           LBs.insert(tree_v);
@@ -171,7 +191,7 @@ namespace dst {
             break;
           add_greedy(tree_best);
         }
-        if (has_key(terms_cand, v) or not has_key(*dists_r, v))
+        if (has_key(terms_cand, v))
           continue;
         auto tree_v = trees.at(v);
         tree_v->add_term(t, d_vt);
@@ -245,7 +265,7 @@ namespace dst {
     ) {
       // dijktra from the root
       if (dists_r == nullptr)
-        std::tie(dists_r, trace_r) = dijkstra(adj, w, r);
+        std::tie(dists_r, trace_r) = dijkstra_from_root_and_cleanup(r);
 
       // dijktra from each terminal
       if (dists_t == nullptr) {
@@ -266,8 +286,6 @@ namespace dst {
         // enum all v as the middle vertex in a 2-level tree
         std::shared_ptr<PartialTree> best = nullptr;
         for (auto v: V_cand) {
-          if (not has_key(*dists_r, v) or r == v)
-            continue;
           double d_rv {dists_r->at(v)};
           auto tree_v = level2_through_v(r, v, d_rv, dists_t, terms_left);
 
@@ -312,21 +330,7 @@ namespace dst {
     auto level3_alg(int n_thresholds=10) {
       // pre-compute dijkstra
       // dijktra from the root
-      auto [dists_r, trace_r] = dijkstra(adj, w, root);
-      std::vector<int> unreachables; // TODO: abstract for common use
-      for (auto u: V) {
-        if (not has_key(*dists_r, u))
-          unreachables.push_back(u);
-      }
-      for (auto u: unreachables)
-        V.erase(u);
-      unreachables.clear();
-      for (auto t: terms_dm) {
-        if (not has_key(*dists_r, t))
-          unreachables.push_back(t);
-      }
-      for (auto t: unreachables)
-        terms_dm.erase(t);
+      auto [dists_r, trace_r] = dijkstra_from_root_and_cleanup(root);
       // dijkstra from each u
       std::unordered_map<int, Dijkstra> sssp_u;
       for (auto u: V) {
@@ -412,7 +416,7 @@ namespace dst {
                 tree2_u = tree2_uv;
               }
             }
-            else if (not Q_u->empty()){ // TODO: note else-if
+            else if (not Q_u->empty()){
               auto [den, niter, d_uv, v, tree2_uv] = Q_u->top();
               while(niter != niter_u) {
                 Q_u->pop();
@@ -526,13 +530,11 @@ namespace dst {
     auto level3_alg_naive() {
       // pre-compute dijkstra
       // dijktra from the root
-      auto [dists_r, trace_r] = dijkstra(adj, w, root);
+      auto [dists_r, trace_r] = dijkstra_from_root_and_cleanup(root);
       // dijkstra from each u
       auto trace_u = std::make_shared<std::unordered_map<int, std::shared_ptr<std::unordered_map<int,int>>>>();
       auto dists_u = std::make_shared<std::unordered_map<int, std::shared_ptr<std::unordered_map<int,double>>>>();
       for (auto u: V) {
-        if (not has_key(*dists_r, u))
-          continue;
         auto [dists_, trace_] = dijkstra(adj, w, u);
         (*dists_u)[u] = dists_; 
         (*trace_u)[u] = trace_;
@@ -541,8 +543,6 @@ namespace dst {
       auto trace_t = std::make_shared<std::unordered_map<int, std::shared_ptr<std::unordered_map<int,int>>>>();
       auto dists_t = std::make_shared<std::unordered_map<int, std::shared_ptr<std::unordered_map<int,double>>>>();
       for (auto t: terms_dm) {
-        if (not has_key(*dists_r, t))
-          continue;
         auto [dists_, trace_] = dijkstra(adj_r, w, t, true);
         (*dists_t)[t] = dists_; 
         (*trace_t)[t] = trace_;
@@ -555,8 +555,6 @@ namespace dst {
         std::shared_ptr<PartialTreeManager> best = nullptr;
 
         for (auto u: V) {
-          if (not has_key(*dists_r, u))
-            continue;
           auto dists_uv = dists_u->at(u);
           auto tree_u = std::make_shared<PartialTreeManager> (root, u, dists_r->at(u));
           std::unordered_set<int> terms_left_u(terms_left.begin(), terms_left.end());
