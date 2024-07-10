@@ -472,10 +472,10 @@ namespace dst {
                 if (tree2_u != nullptr and leq(tree2_u->density(), denlb))
                   break;
                 /***** key pruning *****/
-                if (leq(best->density(), denlb))
+                if (leq(alpha * best->density(), denlb))
                   break;
                 double tree_u_LB = (tree_u->cost_sc + denlb * (terms_dm.size() - tree_u->terms.size())) / terms_dm.size();
-                if (leq(best->density(), tree_u_LB))
+                if (leq(alpha * best->density(), tree_u_LB))
                   break;
               }
 

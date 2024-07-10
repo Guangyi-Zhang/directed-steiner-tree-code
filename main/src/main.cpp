@@ -43,6 +43,7 @@ auto main(int argc, char** argv) -> int {
     ("m,method", "method", cxxopts::value<std::string>()->default_value("naive"))
     ("d,dataset", "dataset", cxxopts::value<std::string>()->default_value("random_graph_wFalse_p01_1000.csv"))
     ("r,rep", "rep", cxxopts::value<int>()->default_value("1"))
+    ("a,alpha", "alpha", cxxopts::value<double>()->default_value("0.99"))
   ;
   auto opresult = options.parse(argc, argv);
 
@@ -59,6 +60,7 @@ auto main(int argc, char** argv) -> int {
   std::string buildtype = opresult["buildtype"].as<std::string>();
   std::string method = opresult["method"].as<std::string>();
   std::string dataset = opresult["dataset"].as<std::string>();
+  double alpha = opresult["alpha"].as<double>();
   int rep = opresult["rep"].as<int>();
 
   //std::string method {"naive"};
@@ -67,7 +69,6 @@ auto main(int argc, char** argv) -> int {
   //std::string method {"level3naive"};
   //std::string method {"level3"};
 
-  double alpha = 0.5;
   //std::string dataset {"random_graph_wTrue_p01_1000.csv"};
   //std::string dataset {"random_graph_wFalse_p01_1000.csv"};
   //std::string dataset {"random_graph_wFalse_p002_1000.csv"};
@@ -165,7 +166,7 @@ auto main(int argc, char** argv) -> int {
     debuginfo = &(partree->debuginfo);
   }
   else if (method.compare("level3") == 0) {
-    partree = dt.level3_alg();
+    partree = dt.level3_alg(alpha);
     tree = partree->to_tree();
     debuginfo = &(partree->debuginfo);
   }
