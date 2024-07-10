@@ -331,6 +331,20 @@ namespace dst {
         (*trace_t)[t] = trace_;
       }
 
+      // A pq for each u to rank 2-level partrees
+      std::unordered_map<int, 
+                         std::priority_queue<std::tuple<double,int,double,int,std::shared_ptr<PartialTree>>, 
+                                             std::vector<std::tuple<double,int,double,int,std::shared_ptr<PartialTree>>>, 
+                                             std::greater<std::tuple<double,int,double,int,std::shared_ptr<PartialTree>>>>
+                        > Q;
+      for(auto u: V) {
+        if (u == root or not has_key(*dists_r, u))
+          continue;
+        Q[u] = std::priority_queue<std::tuple<double,int,double,int,std::shared_ptr<PartialTree>>, 
+                                     std::vector<std::tuple<double,int,double,int,std::shared_ptr<PartialTree>>>, 
+                                     std::greater<std::tuple<double,int,double,int,std::shared_ptr<PartialTree>>>> ();
+      }
+
       // pre-compute low-level look-up table, one for each v in r-u-v-{t}
       std::unordered_map<int, PartialTreeTable> tbls;
       for (auto v: V) {
@@ -363,24 +377,50 @@ namespace dst {
         for (auto u: V) {
           if (u == root or not has_key(*dists_r, u))
             continue;
+          auto Q_u = &(Q.at(u));
           auto &sssp = sssp_u.at(u);
           auto tree_u = std::make_shared<PartialTreeManager> (root, u, dists_r->at(u));
+          std::shared_ptr<PartialTree> tree2_u_old = nullptr;
           std::unordered_set<int> terms_left_u(terms_left.begin(), terms_left.end());
+          int niter_u = 0;
 
           // iterative add 2-level partial trees
           while (terms_left_u.size() > 0) {
+            niter_u++;
             std::shared_ptr<PartialTree> tree2_u = nullptr;
             double d_uv_max = 0;
 
             // process prior reached v's
-            for (auto p: *(sssp.distances)) {
-              auto v = p.first; 
-              auto d_uv = p.second;
-              if (has_key(terms_dm, v) or v == u or v == root)
-                continue;
+            if (not Q_u->empty() and tree2_u_old == nullptr) { // TODO: so guly, find a way to iterate directly
+              auto Q_new = std::priority_queue<std::tuple<double,int,double,int,std::shared_ptr<PartialTree>>, 
+                                               std::vector<std::tuple<double,int,double,int,std::shared_ptr<PartialTree>>>, 
+                                               std::greater<std::tuple<double,int,double,int,std::shared_ptr<PartialTree>>>> ();
+              while (not Q_u->empty()) {
+                auto [den, niter, d_uv, v, tree2_uv] = Q_u->top();
+                Q_u->pop();
+                tree2_uv = tbls.at(v).partree(u, d_uv, &terms_left_u);
+                Q_new.emplace(tree2_uv->density(), niter_u, d_uv, v, tree2_uv);
+              }
+              Q[u] = std::move(Q_new); Q_u = &(Q.at(u));
 
-              // TODO: update min-heap
-              auto tree2_uv = tbls.at(v).partree(u, d_uv, &terms_left_u);
+              auto [den, niter, d_uv, v, tree2_uv] = Q_u->top();
+              if (tree2_u == nullptr or tree2_u->density() > tree2_uv->density()) {
+                tree2_u = tree2_uv;
+              }
+            }
+            else if (not Q_u->empty()){ // TODO: note else-if
+              auto [den, niter, d_uv, v, tree2_uv] = Q_u->top();
+              while(niter != niter_u) {
+                Q_u->pop();
+                if (tree2_uv == nullptr) {
+                  tree2_uv = tbls.at(v).partree(u, d_uv, &terms_left_u);
+                } else {
+                  tree2_uv->erase_and_reset(tree2_u_old->terms);
+                }
+                Q_u->emplace(tree2_uv->density(), niter_u, d_uv, v, tree2_uv);
+                std::tie(den, niter, d_uv, v, tree2_uv) = Q_u->top();
+              }
+
               if (tree2_u == nullptr or tree2_u->density() > tree2_uv->density()) {
                 tree2_u = tree2_uv;
               }
@@ -407,7 +447,7 @@ namespace dst {
                 else
                   break;
               } 
-              // see if early-terminate sssp
+              // try to early-terminate sssp
               if (thr_idx >= 0) {
                 double denlb = (*thr_mindens)[thr_idx].second;
                 if (tree2_u != nullptr and leq(tree2_u->density(), denlb))
@@ -415,10 +455,13 @@ namespace dst {
               }
 
               double den = tbls.at(v).density(d_uv); // a lower bound of true tree2_uv
-              if (tree2_u != nullptr and leq(tree2_u->density(), den))
-                continue; // TODO: remember to push its den into min-heap
+              if (tree2_u != nullptr and leq(tree2_u->density(), den)) {
+                Q_u->emplace(den, niter_u, d_uv, v, nullptr);
+                continue;
+              }
 
               auto tree2_uv = tbls.at(v).partree(u, d_uv, &terms_left_u);
+              Q_u->emplace(tree2_uv->density(), niter_u, d_uv, v, tree2_uv);
               if (tree2_u == nullptr or tree2_u->density() > tree2_uv->density()) {
                 tree2_u = tree2_uv;
               }
@@ -436,13 +479,14 @@ namespace dst {
             }
 
             // merge tree2_u
-            tree_u->append(tree2_u);
+            tree_u->append(tree2_u->copy());
             if (best == nullptr or best->density() > tree_u->density()) {
               best = tree_u;
             }
             for (auto t: tree2_u->terms) {
               terms_left_u.erase(t);
             }
+            tree2_u_old = tree2_u;
           }
         }
 

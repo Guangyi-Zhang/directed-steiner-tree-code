@@ -74,11 +74,18 @@ namespace dst {
     }
 
     void erase_and_reset(const std::unordered_set<int> &terms_del) {
-      for (auto t: terms_del) {
-        if (not has_key(terms, t))
-          continue;
-        terms.erase(t);
-        cost_sc -= distances_t.at(t);
+      if (&terms == &terms_del) { // erase itself
+        for (auto t: terms_del) {
+          cost_sc -= distances_t.at(t);
+        }
+        terms.clear();
+      } else {
+        for (auto t: terms_del) {
+          if (not has_key(terms, t))
+            continue;
+          terms.erase(t);
+          cost_sc -= distances_t.at(t);
+        }
       }
 
       // reset
@@ -129,6 +136,12 @@ namespace dst {
       }
 
       return ready;
+    }
+
+    auto copy() {
+      auto cp = std::make_shared<PartialTree>();
+      *cp = *this;
+      return cp;
     }
 
     auto to_tree () {

@@ -56,6 +56,8 @@ namespace dst {
         bool is_terminal=false) {
       // start from Tree(root), arcs must be added from top-down
       // i.e., arc.first must exist already beforehand
+      if (arc.first == arc.second)
+        return;
       if (is_terminal)
         terms_cov.insert(arc.second);
 
