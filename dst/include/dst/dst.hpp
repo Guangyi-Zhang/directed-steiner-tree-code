@@ -380,7 +380,7 @@ namespace dst {
 
       std::unordered_set<int> terms_left(terms_dm.begin(), terms_dm.end());
       auto tree3 = std::make_shared<PartialTreeManager> (root);
-      // iterative add 3-level partial trees
+      // ***** iterative add 3-level partial trees *****
       while (terms_left.size() > 0) {
         std::shared_ptr<PartialTreeManager> best = nullptr;
 
@@ -392,13 +392,13 @@ namespace dst {
           std::unordered_set<int> terms_left_u(terms_left.begin(), terms_left.end());
           int niter_u = 0;
 
-          // iterative add 2-level partial trees
+          // ***** iterative add 2-level partial trees *****
           while (terms_left_u.size() > 0) {
             niter_u++;
             std::shared_ptr<PartialTree> tree2_u = nullptr;
             double d_uv_max = 0;
 
-            // process prior reached v's
+            // ***** process prior reached v's *****
             if (not Q_u->empty() and tree2_u_old == nullptr) { // TODO: so guly, find a way to iterate directly
               auto Q_new = std::priority_queue<std::tuple<double,int,double,int,std::shared_ptr<PartialTree>>, 
                                                std::vector<std::tuple<double,int,double,int,std::shared_ptr<PartialTree>>>, 
@@ -434,7 +434,7 @@ namespace dst {
               }
             }
 
-            // process new v's
+            // ***** process new v's *****
             while (true) { 
               // TODO: setup to_reach in sssp
               auto [v, d_uv] = sssp.next(); // even after reaching all v, most pq has huge amount left
@@ -486,7 +486,7 @@ namespace dst {
                 break;
             }
 
-            // merge tree2_u
+            // ***** merge tree2_u: best among tree2_uv *****
             if (DEBUG) fmt::println("u={} adds partree rooted at v={}, #terms={}", u, tree2_u->v, tree2_u->terms.size());
             tree_u->append(tree2_u->copy());
             if (best == nullptr or best->density() > tree_u->density()) {

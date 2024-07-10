@@ -14,6 +14,36 @@
 #include <tuple>
 
 
+TEST_CASE("minden_by_thresholds") {
+  using namespace dst;
+
+  PartialTreeTable tb1 (1);
+  tb1.add_term(11, 1);
+  tb1.add_term(12, 10);
+  tb1.build();
+
+  PartialTreeTable tb2 (2);
+  tb2.add_term(13, 1.5);
+  tb2.add_term(14, 1.5);
+  tb2.build();
+
+  std::unordered_map<int, PartialTreeTable> tbls;
+  tbls[1] = std::move(tb1);
+  tbls[2] = std::move(tb2);
+  int n_thrs = 3;
+  double thr_max = 3;
+  auto thr_mindens = minden_by_thresholds(n_thrs, thr_max, tbls);
+
+  CHECK(thr_mindens->size() == 3);
+  CHECK(eq((*thr_mindens)[0].first, 1));
+  CHECK(eq((*thr_mindens)[0].second, (1+1)));
+  CHECK(eq((*thr_mindens)[1].first, 2));
+  CHECK(eq((*thr_mindens)[1].second, (2+1.5*2)/2));
+  CHECK(eq((*thr_mindens)[2].first, 3));
+  CHECK(eq((*thr_mindens)[2].second, (3+1.5*2)/2));
+}
+
+
 TEST_CASE("PartialTreeTable") {
   using namespace dst;
 
