@@ -402,6 +402,10 @@ namespace dst {
 
         // ***** find the best 3-level partree *****
         for (auto u: V) {
+          if (leq(alpha * best->density(), best2->density() - dists_r->at(u))) {
+            break;
+          }
+
           auto Q_u = &(Q.at(u));
           auto &sssp = sssp_u.at(u);
           auto tree_u = std::make_shared<PartialTreeManager> (root, u, dists_r->at(u));
