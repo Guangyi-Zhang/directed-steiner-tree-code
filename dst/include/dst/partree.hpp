@@ -7,6 +7,7 @@
 #include <set>
 #include <list>
 
+#include <dst/utils.hpp>
 #include <dst/tree.hpp>
 
 
@@ -247,11 +248,12 @@ namespace dst {
   };
 
   class PartialTreeTable {
-    // delete and partree take O(k) time
+    // fix v, an oracle to return terminal subsets (or their costs) given d_rv
+    // delete() and partree() take O(k) time
     public:
     int v {NONVERTEX}; // the root has a single child
     std::vector<std::pair<int,double>> term_ds;
-    std::vector<std::shared_ptr<TableCell>> cells;
+    std::vector<std::shared_ptr<TableCell>> cells; // a cell keeps a threshold 
 
     PartialTreeTable() {};
 
@@ -340,43 +342,77 @@ namespace dst {
   };
 
 
-  auto minden_by_thresholds(
-      int n_thresholds, 
-      double thr_max,
-      std::unordered_map<int, PartialTreeTable> &tbls
-  ){
-    auto thr_mindens = std::make_shared<std::vector<std::pair<double,double>>> ();
+  class ThresholdedMinDensity {
+    public:
+    int n_thresholds;
+    double thr_max;
+    std::shared_ptr<std::vector<std::pair<double,double>>> thr_mindens;
+    int thr_idx = -1;
 
-    std::priority_queue<std::tuple<double,int,int>, 
-                        std::vector<std::tuple<double,int,int>>, 
-                        std::greater<std::tuple<double,int,int>>> pq_v;
-    for (int i=1; i <= n_thresholds; i++) {
-      double thr = thr_max/n_thresholds * i;
+    ThresholdedMinDensity(
+        int n_thresholds, 
+        double thr_max,
+        std::unordered_map<int, PartialTreeTable> &tbls
+    ) : n_thresholds {n_thresholds}, thr_max {thr_max} 
+    {
+      thr_mindens = std::make_shared<std::vector<std::pair<double,double>>> ();
 
-      // initialize pq_v with first density for each v
-      if (i == 1) {
-        for (auto &p: tbls) {
-          auto v = p.first;
-          double den = p.second.density(thr); 
-          pq_v.emplace(den, v, 1);
+      std::priority_queue<std::tuple<double,int,int>, 
+                          std::vector<std::tuple<double,int,int>>, 
+                          std::greater<std::tuple<double,int,int>>> pq_v;
+      for (int i=1; i <= n_thresholds; i++) {
+        double thr = thr_max/n_thresholds * i;
+
+        // initialize pq_v with first density for each v
+        if (i == 1) {
+          for (auto &p: tbls) {
+            auto v = p.first;
+            double den = p.second.density(thr); 
+            pq_v.emplace(den, v, 1);
+          }
+        }
+
+        // find min density for thr
+        while (true) {
+          auto [den, v, i_] = pq_v.top();
+          if (i == i_) {
+            thr_mindens->push_back(std::make_pair(thr, den));
+            break;
+          } else {
+            pq_v.pop();
+            double den = tbls.at(v).density(thr); 
+            pq_v.emplace(den, v, i);
+          }
         }
       }
+    };
 
-      // find min density for thr
-      while (true) {
-        auto [den, v, i_] = pq_v.top();
-        if (i == i_) {
-          thr_mindens->push_back(std::make_pair(thr, den));
-          break;
-        } else {
-          pq_v.pop();
-          double den = tbls.at(v).density(thr); 
-          pq_v.emplace(den, v, i);
-        }
-      }
+    void reset_thr() {
+      thr_idx = -1;
     }
 
-    return thr_mindens;
+
+    double min_density(double d_rv) {
+      // called with increasing d_rv!
+
+      // find the largest thr_idx <= d_rv
+      while (true) {
+        if (thr_idx == thr_mindens->size() - 1)
+          break;
+
+        double thr_next = (*thr_mindens)[thr_idx+1].first;
+        if (leq(thr_next, d_rv))
+          thr_idx += 1;
+        else
+          break;
+      } 
+
+      if (thr_idx >= 0) {
+        return (*thr_mindens)[thr_idx].second;
+      }
+      return -1;
+    }
+
   };
 
 } // namespace dst

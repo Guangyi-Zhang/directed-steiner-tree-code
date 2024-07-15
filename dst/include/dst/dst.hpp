@@ -328,6 +328,9 @@ namespace dst {
 
 
     auto level3_alg(double alpha=0.99, int n_thresholds=10) {
+      /*---------------
+       | Pre-compute
+       --------------*/
       // pre-compute dijkstra
       // dijktra from the root
       auto [dists_r, trace_r] = dijkstra_from_root_and_cleanup(root);
@@ -370,19 +373,22 @@ namespace dst {
         tbl.build();
         tbls[v] = std::move(tbl);
       }
-      // pre-compute min-den among 2-level partrees for each d_uv threshold
-      double thr_max = 0;
-      for (auto &p: *dists_r) {
-        thr_max = std::max(thr_max, p.second);
-      }
-      auto thr_mindens = minden_by_thresholds(n_thresholds, thr_max, tbls);
-      int thr_idx = -1;
 
+      // pre-compute min-den among 2-level partrees for each d_uv threshold
+      double dist_max = 0; // dist_max may not >= max_{u,v} d_uv
+      for (auto &p: *dists_r) {
+        dist_max = std::max(dist_max, p.second);
+      }
+      auto thrminden = ThresholdedMinDensity(n_thresholds, dist_max, tbls);
+
+      /*---------------------------------
+       | Start constructing 3-level tree
+       --------------------------------*/
       std::unordered_set<int> terms_left(terms_dm.begin(), terms_dm.end());
       auto tree3 = std::make_shared<PartialTreeManager> (root);
       // ***** iterative add 3-level partial trees *****
       while (terms_left.size() > 0) {
-        // ***** best 2-level partree as initial UB *****
+        // best 2-level partree as initial UB 
         auto best = std::make_shared<PartialTreeManager> (root);
         std::shared_ptr<PartialTree> best2 = nullptr;
         for (auto v: V) {
@@ -454,30 +460,16 @@ namespace dst {
               if (u != root and v == root)
                 continue;
 
-              d_uv_max = std::max(d_uv, d_uv_max); 
-              // find the largest thr <= d_uv_max
-              while (true) { // TODO: use exponential search
-                if (thr_idx == thr_mindens->size() - 1)
-                  break;
-                double thr_next = (*thr_mindens)[thr_idx+1].first;
-                if (leq(thr_next, d_uv_max)) {
-                  thr_idx += 1;
-                }
-                else
-                  break;
-              } 
               // try to early-terminate sssp
-              if (thr_idx >= 0) {
-                double denlb = (*thr_mindens)[thr_idx].second;
-                if (tree2_u != nullptr and leq(tree2_u->density(), denlb))
-                  break;
-                /***** key pruning *****/
-                if (leq(alpha * best->density(), denlb))
-                  break;
-                double tree_u_LB = (tree_u->cost_sc + denlb * (terms_dm.size() - tree_u->terms.size())) / terms_dm.size();
-                if (leq(alpha * best->density(), tree_u_LB))
-                  break;
-              }
+              d_uv_max = std::max(d_uv, d_uv_max); 
+              double denlb = thrminden.min_density(d_uv_max);
+              if (tree2_u != nullptr and leq(tree2_u->density(), denlb))
+                break;
+              if (leq(alpha * best->density(), denlb))
+                break;
+              double tree_u_LB = (tree_u->cost_sc + denlb * (terms_dm.size() - tree_u->terms.size())) / terms_dm.size();
+              if (leq(alpha * best->density(), tree_u_LB))
+                break;
 
               double den = tbls.at(v).density(d_uv); // a lower bound of true tree2_uv
               if (tree2_u != nullptr and leq(tree2_u->density(), den)) {
@@ -513,8 +505,9 @@ namespace dst {
               terms_left_u.erase(t);
             }
             tree2_u_old = tree2_u;
-          }
-        }
+            thrminden.reset_thr();
+          } // end of processing one vertex u
+        } // found a greedy 3-level partree
 
         if (best == nullptr or best->terms.size() == 0)
           break;
@@ -523,6 +516,7 @@ namespace dst {
         for (auto &p: tbls) {
           p.second.erase(best->terms);
         }
+        thrminden = ThresholdedMinDensity(n_thresholds, dist_max, tbls);
         tree3->append(best);
         if (DEBUG) fmt::println("add partree r-u={}, cost_sc={}, #terms={}", best->u, best->cost_sc, best->terms.size());
       }
