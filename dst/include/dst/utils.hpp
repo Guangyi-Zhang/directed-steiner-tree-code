@@ -33,6 +33,20 @@ namespace dst {
   }
 
 
+  // a hack to iterate priority_queue: 
+  // https://stackoverflow.com/questions/4484767/how-to-iterate-over-a-priority-queue
+  template <class T, class S, class C>
+  S& Container(std::priority_queue<T, S, C>& q) {
+    struct HackedQueue : private std::priority_queue<T, S, C> {
+      static S& Container(std::priority_queue<T, S, C>& q) {
+        return q.*&HackedQueue::c;
+      }
+    };
+
+    return HackedQueue::Container(q);
+  }
+
+
   template <typename T>
   std::vector<size_t> argsort(const std::vector<T> &v) {
     // https://stackoverflow.com/questions/1577475/c-sorting-and-keeping-track-of-indexes

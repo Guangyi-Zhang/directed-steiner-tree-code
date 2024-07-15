@@ -145,6 +145,24 @@ TEST_CASE("dijkstra") {
 }
 
 
+TEST_CASE("pq") {
+  using namespace dst;
+  
+  std::priority_queue<int> pq;
+  std::vector<int> &tasks = Container(pq);
+
+  for(int i=0;i<20;i++){
+    pq.push(i);
+  }
+  CHECK(tasks.size() == pq.size());
+
+  int sum = 0;
+  for(auto i=tasks.begin(); i!=tasks.end(); i++)
+    sum += *i;
+  CHECK(sum == (0+19)*10);
+}
+
+
 TEST_CASE("misc") {
   using namespace dst;
 

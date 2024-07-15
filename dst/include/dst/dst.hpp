@@ -416,13 +416,14 @@ namespace dst {
             double d_uv_max = 0;
 
             // ***** process prior reached v's *****
-            if (not Q_u->empty() and tree2_u_old == nullptr) { // TODO: so guly, find a way to iterate directly
+            if (not Q_u->empty() and tree2_u_old == nullptr) { // restore Q_u at the i-th visit to u 
               auto Q_new = std::priority_queue<std::tuple<double,int,double,int,std::shared_ptr<PartialTree>>, 
                                                std::vector<std::tuple<double,int,double,int,std::shared_ptr<PartialTree>>>, 
                                                std::greater<std::tuple<double,int,double,int,std::shared_ptr<PartialTree>>>> ();
-              while (not Q_u->empty()) {
-                auto [den, niter, d_uv, v, tree2_uv] = Q_u->top();
-                Q_u->pop();
+
+              std::vector<std::tuple<double,int,double,int,std::shared_ptr<PartialTree>>> &wrap_Q_u = Container(*Q_u);
+              for(auto it = wrap_Q_u.begin(); it != wrap_Q_u.end(); it++) { // iterate Q_u
+                auto [den, niter, d_uv, v, tree2_uv] = *it;
                 tree2_uv = tbls.at(v).partree(u, d_uv, &terms_left_u);
                 Q_new.emplace(tree2_uv->density(), niter_u, d_uv, v, tree2_uv);
               }
@@ -433,7 +434,7 @@ namespace dst {
                 tree2_u = tree2_uv;
               }
             }
-            else if (not Q_u->empty()){ // TODO: extra Q to keep updated partrees
+            else if (not Q_u->empty()){ // update Q_u across iterations within the i-th visit
               auto [den, niter, d_uv, v, tree2_uv] = Q_u->top();
               while(niter != niter_u) {
                 Q_u->pop();
