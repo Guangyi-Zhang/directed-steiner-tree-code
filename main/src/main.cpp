@@ -5,6 +5,7 @@
 #include "spdlog/spdlog.h"
 #include "spdlog/sinks/basic_file_sink.h"
 #include "dst/dst.hpp"
+#include "dst/nadeau.hpp"
 
 #include <cxxopts.hpp>
 #include <cassert>
@@ -44,6 +45,7 @@ auto main(int argc, char** argv) -> int {
     ("d,dataset", "dataset", cxxopts::value<std::string>()->default_value("random_graph_wFalse_p01_1000.csv"))
     ("r,rep", "rep", cxxopts::value<int>()->default_value("1"))
     ("a,alpha", "alpha", cxxopts::value<double>()->default_value("0.99"))
+    ("t,note", "note", cxxopts::value<std::string>()->default_value("none"))
   ;
   auto opresult = options.parse(argc, argv);
 
@@ -55,11 +57,13 @@ auto main(int argc, char** argv) -> int {
   //std::string version {"v4"}; // @20240705: start making level3 faster
   //std::string version {"v5"}; // @20240707: everything by pointers
   //std::string version {"v6"}; // @20240710: pq for PartialTrees
-  std::string version {"v7"}; // @20240710: start pruning
+  //std::string version {"v7"}; // @20240710: start pruning
+  std::string version {"v8"}; // @20240715: start pruning2
 
   std::string buildtype = opresult["buildtype"].as<std::string>();
   std::string method = opresult["method"].as<std::string>();
   std::string dataset = opresult["dataset"].as<std::string>();
+  std::string note = opresult["note"].as<std::string>();
   double alpha = opresult["alpha"].as<double>();
   int rep = opresult["rep"].as<int>();
 
@@ -179,12 +183,15 @@ auto main(int argc, char** argv) -> int {
   double time_elapsed_ms = 1000.0 * (c_end-c_start) / CLOCKS_PER_SEC;
   /* FINISH RUNNING */
 
+  auto rss = getPeakRSS();
+
   // record results as a json string
   rapidjson::Document d;
   rapidjson::Document::AllocatorType& a = d.GetAllocator();
 
   d.SetObject();
   d.AddMember("version", rapidjson::Value(rapidjson::StringRef(version.c_str())), a); 
+  d.AddMember("note", rapidjson::Value(rapidjson::StringRef(note.c_str())), a); 
   d.AddMember("buildtype", rapidjson::Value(rapidjson::StringRef(opresult["buildtype"].as<std::string>().c_str())), a); 
   d.AddMember("method", rapidjson::Value(rapidjson::StringRef(method.c_str())), a); 
   d.AddMember("rep", rapidjson::Value(rep), a); 
@@ -196,6 +203,7 @@ auto main(int argc, char** argv) -> int {
   d.AddMember("n_cov", rapidjson::Value(tree->terms_cov.size()), a); 
   d.AddMember("runtime", rapidjson::Value(time_elapsed_ms), a); 
   d.AddMember("sssp_nodes_visited", rapidjson::Value(std::stoi(debuginfo->at("sssp_nodes_visited"))), a); 
+  d.AddMember("mem", rapidjson::Value(rss), a); 
 
   rapidjson::StringBuffer buffer;
   rapidjson::Writer<rapidjson::StringBuffer> writer(buffer);
