@@ -408,6 +408,7 @@ namespace dst {
           std::shared_ptr<PartialTree> tree2_u_old = nullptr;
           std::unordered_set<int> terms_left_u(terms_left.begin(), terms_left.end());
           int niter_u = 0;
+          bool is_u_pruned = false;
 
           // ***** iterative add 2-level partial trees *****
           while (terms_left_u.size() > 0) {
@@ -466,11 +467,15 @@ namespace dst {
               double denlb = thrminden.min_density(d_uv_max);
               if (tree2_u != nullptr and leq(tree2_u->density(), denlb))
                 break;
-              if (leq(alpha * best->density(), denlb))
+              if (leq(alpha * best->density(), denlb)) {
+                is_u_pruned = true;
                 break;
-              double tree_u_LB = (tree_u->cost_sc + denlb * (terms_dm.size() - tree_u->terms.size())) / terms_dm.size();
-              if (leq(alpha * best->density(), tree_u_LB))
+              }
+              double tree_u_LB = (tree_u->cost_sc + denlb * (terms_left.size() - tree_u->terms.size())) / terms_left.size();
+              if (leq(alpha * best->density(), tree_u_LB)) {
+                is_u_pruned = true;
                 break;
+              }
 
               double den = tbls.at(v).density(d_uv); // a lower bound of true tree2_uv
               if (tree2_u != nullptr and leq(tree2_u->density(), den)) {
@@ -486,7 +491,7 @@ namespace dst {
             }
 
             // criterion for refusing new tree2_u
-            if (tree2_u == nullptr or tree2_u->terms.size() == 0)
+            if (is_u_pruned or tree2_u == nullptr or tree2_u->terms.size() == 0)
               break;
             double den_new = (tree_u->cost_sc + tree2_u->cost_sc) / 
               (terms_left.size() - terms_left_u.size() + tree2_u->terms.size());
@@ -507,7 +512,7 @@ namespace dst {
             }
             tree2_u_old = tree2_u;
             thrminden.reset_thr();
-          } // end of processing one vertex u
+          } // end of processing vertex u
         } // found a greedy 3-level partree
 
         if (best == nullptr or best->terms.size() == 0)
