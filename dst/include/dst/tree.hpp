@@ -43,12 +43,14 @@ namespace dst {
 
     std::unordered_map<std::string, std::string> debuginfo;
 
+    Tree() {};
+
     Tree(int root) : 
         root {root} {
       trace[root] = NONVERTEX;
     }
 
-    void add_arc(
+    auto add_arc(
         std::pair<int,int> arc, 
         double w_arc, 
         const std::shared_ptr<std::unordered_map<int,int>> trace_arc, 
@@ -56,8 +58,11 @@ namespace dst {
         bool is_terminal=false) {
       // start from Tree(root), arcs must be added from top-down
       // i.e., arc.first must exist already beforehand
+      auto covered = std::make_shared<std::unordered_set<int>>();
+
       if (arc.first == arc.second)
-        return;
+        return covered;
+
       if (is_terminal)
         terms_cov.insert(arc.second);
 
@@ -82,8 +87,11 @@ namespace dst {
           // ok to shortcut 
           break;
         }
+        covered->insert(v);
         v = trace_arc->at(v);
       }
+
+      return covered;
     }
 
     double density() const {

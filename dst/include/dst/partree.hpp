@@ -162,45 +162,62 @@ namespace dst {
     public:
     int u {NONVERTEX}; // the root has a single child
     double d_ru;
-    std::vector<std::shared_ptr<PartialTree>> subtrees; // used as r->{v}->{t}
-    std::vector<std::shared_ptr<PartialTreeManager>> trees; // used as r->{u}->{v}->{t}
+    std::shared_ptr<Tree> totree = nullptr;
+    // use vector, as trees are processed (add_arc()) by the order they are added
+    // bool flag to mark if it has been added into totree
+    std::vector<std::pair<std::shared_ptr<PartialTree>, bool>> subtrees; // used as r->{v}->{t}
+    std::vector<std::pair<std::shared_ptr<PartialTreeManager>, bool>> trees; // used as r->{u}->{v}->{t}
 
-    PartialTreeManager() {};
+    PartialTreeManager() {}; // only for nullptr
 
     PartialTreeManager(int r) {
       root = r;
+      totree = std::make_shared<Tree> (root);
     };
 
     PartialTreeManager(int r, int u, double d_ru) : 
         u {u}, d_ru {d_ru} {
       root = r;
       cost_sc = d_ru;
+      totree = std::make_shared<Tree> (root);
     };
 
-    void append(std::shared_ptr<PartialTree> tree) {
-      subtrees.push_back(tree);
+    void append(std::shared_ptr<PartialTree> tree, bool to_merge=false) {
+      subtrees.push_back(std::make_pair(tree, to_merge));
       cost_sc += tree->cost_sc;
       for (auto t: tree->terms)
         terms.insert(t);
+      
+      if (to_merge) {
+        totree->add_arc(std::make_pair(root, tree->v), tree->d_rv, trace_r);
+        for (auto t: tree->terms) {
+          totree->add_arc(std::make_pair(tree->v, t), tree->distances_t.at(t), trace_t->at(t), true, true);
+        }
+      }
     }
 
-    void append(std::shared_ptr<PartialTreeManager> tree) {
-      trees.push_back(tree);
+    void append(std::shared_ptr<PartialTreeManager> tree, bool to_merge=false) {
+      trees.push_back(std::make_pair(tree, to_merge));
       cost_sc += tree->cost_sc;
       for (auto t: tree->terms)
         terms.insert(t);
+
+      if (to_merge) {
+        // TODO
+      }
     }
 
     auto to_tree () {
-      auto tree = std::make_shared<Tree> (root);
-
       // a helper
       auto to_tree3 = [&] (const PartialTreeManager *tree3) {
-        tree->add_arc(std::make_pair(tree3->root, tree3->u), tree3->d_ru, trace_r);
-        for (auto tree2: tree3->subtrees) {
-          tree->add_arc(std::make_pair(tree3->u, tree2->v), tree2->d_rv, (*trace_u)[tree3->u]);
+        totree->add_arc(std::make_pair(tree3->root, tree3->u), tree3->d_ru, trace_r);
+        for (auto tree2_flag: tree3->subtrees) {
+          if (tree2_flag.second) 
+            continue;
+          auto tree2 = tree2_flag.first;
+          totree->add_arc(std::make_pair(tree3->u, tree2->v), tree2->d_rv, (*trace_u)[tree3->u]);
           for (auto t: tree2->terms) {
-            tree->add_arc(std::make_pair(tree2->v, t), tree2->distances_t.at(t), trace_t->at(t), true, true);
+            totree->add_arc(std::make_pair(tree2->v, t), tree2->distances_t.at(t), trace_t->at(t), true, true);
           }
         }
       };
@@ -210,30 +227,39 @@ namespace dst {
         to_tree3(this);
       } else {
         // building r->{u}->{v}-{t}
-        for (auto tree3: trees) {
+        for (auto tree3_flag: trees) {
+          if (tree3_flag.second)
+            continue;
+          auto tree3 = tree3_flag.first;
           if (tree3->u != NONVERTEX) {
             to_tree3(tree3.get());
           } else {
-            // appended 2-level to a manage w/ u
-            for (auto tree2: tree3->subtrees) {
-              tree->add_arc(std::make_pair(root, tree2->v), tree2->d_rv, trace_r);
+            // appended 2-level to a manager w/ u
+            for (auto tree2_flag: tree3->subtrees) {
+              if (tree2_flag.second)
+                continue;
+              auto tree2 = tree2_flag.first;
+              totree->add_arc(std::make_pair(root, tree2->v), tree2->d_rv, trace_r);
               for (auto t: tree2->terms) {
-                tree->add_arc(std::make_pair(tree2->v, t), tree2->distances_t.at(t), trace_t->at(t), true, true);
+                totree->add_arc(std::make_pair(tree2->v, t), tree2->distances_t.at(t), trace_t->at(t), true, true);
               }
             }
           }
         }
 
         // building r->{v}-{t}
-        for (auto tree2: subtrees) {
-          tree->add_arc(std::make_pair(root, tree2->v), tree2->d_rv, trace_r);
+        for (auto tree2_flag: subtrees) {
+          if (tree2_flag.second)
+            continue;
+          auto tree2 = tree2_flag.first;
+          totree->add_arc(std::make_pair(root, tree2->v), tree2->d_rv, trace_r);
           for (auto t: tree2->terms) {
-            tree->add_arc(std::make_pair(tree2->v, t), tree2->distances_t.at(t), trace_t->at(t), true, true);
+            totree->add_arc(std::make_pair(tree2->v, t), tree2->distances_t.at(t), trace_t->at(t), true, true);
           }
         }
       }
 
-      return tree;
+      return totree;
     }
   };
 

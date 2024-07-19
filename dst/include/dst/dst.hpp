@@ -281,7 +281,6 @@ namespace dst {
 
       // iteratively add 2-level partial trees
       auto par = std::make_shared<PartialTreeManager> (r);
-      int v_best_ {NONVERTEX};
       std::unordered_set<int> terms_left(terms_cand.begin(), terms_cand.end());
       while (terms_left.size() > 0) {
         // enum all v as the middle vertex in a 2-level tree
@@ -291,13 +290,12 @@ namespace dst {
           auto tree_v = level2_through_v(r, v, d_rv, dists_t, terms_left);
 
           // keep the best across all v
-          //if (DEBUG) fmt::println("level2_rooted_at_{}: #terms_left={}, trying v={} and density={} and cov={}", r, terms_left.size(), v, tree_v.density(), tree_v.terms_cov);
+          if (DEBUG) fmt::println("level2_rooted_at_{}: #terms_left={}, trying v={} and density={} and cov={}", r, terms_left.size(), v, tree_v->density(), tree_v->terms);
           if (best == nullptr or
               tree_v->density() < best->density() or // breaking tie
               (std::abs(tree_v->density() - best->density()) < EPSILON and 
                tree_v->terms.size() > best->terms.size())) { //
             best = tree_v;
-            v_best_ = v;
           }
         }
 
@@ -306,7 +304,7 @@ namespace dst {
           break;
 
         // merge the best 2-level partial tree
-        if (DEBUG) fmt::println("level2_rooted_at_{}: #terms_left={}, best v={} and density={} and cov={}", r, terms_left.size(), v_best_, best->density(), best->terms);
+        if (DEBUG) fmt::println("level2_rooted_at_{}: #terms_left={}, best v={} and density={} and cov={}", r, terms_left.size(), best->v, best->density(), best->terms);
         for (auto t: best->terms)
           terms_left.erase(t);
         par->append(best);
@@ -687,7 +685,7 @@ namespace dst {
       auto tree = std::make_shared<Tree> (root);
       for (auto t: terms_dm) {
         if (not has_key(*trace, t))
-            continue; // disconnected graph
+          continue; // disconnected graph
 
         tree->add_arc(std::make_pair(root, t), (*dists)[t], trace, false, true);
       }
