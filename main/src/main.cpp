@@ -154,6 +154,10 @@ auto main(int argc, char** argv) -> int {
     tree = dt.naive_alg();
     debuginfo = &(tree->debuginfo);
   }
+  else if (method.compare("adpnaive") == 0) {
+    tree = dt.adaptive_naive_alg();
+    debuginfo = &(tree->debuginfo);
+  }
   else if (method.compare("level2") == 0) {
     partree = dt.level2_alg();
     tree = partree->to_tree();

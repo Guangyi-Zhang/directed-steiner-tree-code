@@ -635,6 +635,51 @@ namespace dst {
     }
 
 
+    auto adaptive_naive_alg() {
+
+      auto tree = std::make_shared<Tree> (root);
+      int sssp_nodes_visited = 0;
+
+      std::unordered_set<int> terms_left(terms_dm.begin(), terms_dm.end());
+      while (not terms_left.empty()) {
+        auto [dists, trace] = dijkstra(adj, w, root, false, terms_left);
+        sssp_nodes_visited += dists->size();
+
+        // find the best shortest path
+        int t_min = NONVERTEX;
+        double dist_min = std::numeric_limits<double>::max();
+        for (auto t: terms_left) {
+          if (not has_key(*dists, t))
+            continue; // disconnected graph
+          if (dist_min > dists->at(t)) {
+            dist_min = dists->at(t);
+            t_min = t;
+          }
+        }
+
+        // include the best shortest path
+        if (t_min != NONVERTEX) {
+          tree->add_arc(std::make_pair(root, t_min), (*dists)[t_min], trace, false, true);
+          terms_left.erase(t_min);
+
+          // zero weight for covered arcs
+          auto v = t_min;
+          while (trace->at(v) != NONVERTEX) {
+            auto e = std::make_pair(trace->at(v), v);
+            w[e] = 0;
+            v = trace->at(v);
+          }
+        } 
+        else {
+          break;
+        }
+      }
+
+      tree->debuginfo["sssp_nodes_visited"] = std::to_string(sssp_nodes_visited);
+      return tree;
+    }
+
+
     auto naive_alg() {
       auto [dists, trace] = dijkstra(adj, w, root, false, terms_dm);
 

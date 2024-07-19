@@ -18,7 +18,37 @@
 #include "tests/test_level3.cpp"
 
 
-TEST_CASE("DST") {
+TEST_CASE("adaptive_naive") {
+  using namespace dst;
+
+  std::vector<std::pair<int,int>> edges {std::make_pair(0,1), 
+                                         std::make_pair(0,2), 
+                                         std::make_pair(1,2)};
+  std::vector<double> weights {1,1,0.9};
+  std::vector<int> terms {1,2};
+  DST dt = DST(edges, weights, 0, terms);
+
+  CHECK(dt.naive_alg()->cost == 1+1);
+  CHECK(dt.naive_alg()->cost_sc == 1+1);
+
+  auto tree = dt.adaptive_naive_alg();
+  CHECK(tree->cost == 1.9);
+  CHECK(tree->cost_sc == 1.9);
+}
+
+
+TEST_CASE("naive") {
+  /*
+    <---+0+--->
+    |    +    |
+    |    |    |
+    v    v    v
+    1+-->2    3 -> 5
+              +
+              |
+              +
+              4
+  */
   using namespace dst;
 
   std::vector<std::pair<int,int>> edges {std::make_pair(0,1), 
@@ -28,7 +58,7 @@ TEST_CASE("DST") {
                                          std::make_pair(3,4), 
                                          std::make_pair(4,3), 
                                          std::make_pair(3,5)};
-  std::vector<double> weights {1,1,1,1,1,1,1};
+  std::vector<double> weights {1,1,1,0.9,1,1,1};
   std::vector<int> terms {2,3,5};
   DST dt = DST(edges, weights, 0, terms);
 
@@ -36,6 +66,10 @@ TEST_CASE("DST") {
   
   CHECK(dt.naive_alg()->cost == 1+1+2-1);
   CHECK(dt.naive_alg()->cost_sc == 1+1+2);
+
+  auto tree = dt.adaptive_naive_alg();
+  CHECK(tree->cost == 1+1+2-1);
+  CHECK(tree->cost_sc == 1+1+1);
 }
 
 
