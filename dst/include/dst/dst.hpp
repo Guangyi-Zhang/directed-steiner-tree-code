@@ -190,6 +190,7 @@ namespace dst {
           if (tree_best->terms.size() == 0)
             break;
           add_greedy(tree_best);
+          continue;
         }
         if (has_key(terms_cand, v))
           continue;
