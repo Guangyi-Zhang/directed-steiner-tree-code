@@ -170,16 +170,20 @@ namespace dst {
           cosssp.delete_source(t);
         }
         auto covered_by_best = par->append(best, true);
+        double denbest_next = std::numeric_limits<double>::max();
         for (auto v: V_cand) {
           auto tree_v = trees.at(v);
           tree_v->erase_and_reset(best->terms);
           if (has_key(*covered_by_best, tree_v->v) and not has_key(*covered, tree_v->v)) // newly covered
             tree_v->zero_drv();
+          if (denbest_next < tree_v->density()) {
+            denbest_next = tree_v->density();
+            v_best = v;
+          }
           LBs.insert(tree_v);
         }
         for (auto v: *covered_by_best)
           covered->insert(v);
-        v_best = NONVERTEX; // reset
       };
 
       // iteratively add 2-level greedy partial trees
