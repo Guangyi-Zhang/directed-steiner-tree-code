@@ -44,7 +44,7 @@ namespace dst {
     double d_rv;
 
     std::unordered_map<int, double> distances_t;
-    std::list<int> terms_after_ready;
+    std::list<int> terms_after_ready, terms_before_ready;
     double distance_lastly_added = 0;
     double density_ = -1; // fake density
     bool ready = false; 
@@ -69,6 +69,7 @@ namespace dst {
         terms_after_ready.push_back(t);
       } else {
         terms.insert(t);
+        terms_before_ready.push_back(t);
         cost_sc += d_vt;
         distance_lastly_added = d_vt;
       }
@@ -107,6 +108,34 @@ namespace dst {
           terms_after_ready.push_front(t);
         }
       }
+    }
+
+    void zero_drv() {
+      // reset
+      cost_sc = 0;
+      ready = false;
+      std::unordered_set<int> terms_cp = std::move(terms);
+      std::list<int> terms_before_ready_cp = std::move(terms_before_ready);
+      std::list<int> terms_after_ready_cp = std::move(terms_after_ready);
+      terms.clear();
+      terms_before_ready.clear();
+      terms_after_ready.clear();
+      distance_lastly_added = 0;
+
+      // re-add items in order
+      // no need to iterate t's in terms_after_ready
+      std::list<int> terms_excluded;
+      for (auto t: terms_before_ready_cp) {
+        if (not has_key(terms_cp, t)) 
+          continue;
+
+        if (ready)
+          terms_excluded.push_front(t);
+        else 
+          add_term(t, distances_t.at(t));
+      }
+      terms_after_ready.splice(terms_after_ready.end(), terms_excluded);
+      terms_after_ready.splice(terms_after_ready.end(), terms_after_ready_cp);
     }
 
     double density_LB(int k) {

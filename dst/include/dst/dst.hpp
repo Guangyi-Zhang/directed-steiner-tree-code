@@ -154,10 +154,14 @@ namespace dst {
         LBs.insert(trees.at(v));
       }
 
-      // define what to do after finding a greedy partial tree
-      auto par = std::make_shared<PartialTreeManager> (r);
-      int v_best {NONVERTEX};
       CoordinatedDijkstra cosssp {adj_r, w, terms_cand, true}; // dijktra from each terminal
+      auto par = std::make_shared<PartialTreeManager> (r);
+      par->trace_r = trace_r;
+      par->trace_t = cosssp.trace_t;
+      int v_best {NONVERTEX};
+      auto covered = std::make_shared<std::unordered_set<int>>();
+
+      // define what to do after finding a greedy partial tree
       auto add_greedy = [&] (std::shared_ptr<PartialTree> best_) {
         auto best = std::make_shared<PartialTree>();
         *best = *best_; // copy
@@ -165,12 +169,16 @@ namespace dst {
         for (auto t: best->terms) {
           cosssp.delete_source(t);
         }
+        auto covered_by_best = par->append(best, true);
         for (auto v: V_cand) {
           auto tree_v = trees.at(v);
           tree_v->erase_and_reset(best->terms);
+          if (has_key(*covered_by_best, tree_v->v) and not has_key(*covered, tree_v->v)) // newly covered
+            tree_v->zero_drv();
           LBs.insert(tree_v);
         }
-        par->append(best);
+        for (auto v: *covered_by_best)
+          covered->insert(v);
         v_best = NONVERTEX; // reset
       };
 
@@ -206,9 +214,10 @@ namespace dst {
             tree_v->terms.size() > tree_best_old->terms.size())) {
           v_best = v;
 
+          // remove all LBs larger than den_v
           auto tmp = std::make_shared<PartialTree> (tree_v->density()); // a fake tree
           for (auto it = LBs.upper_bound(tmp); it != LBs.end(); ) {
-            it = LBs.erase(it);
+            it = LBs.erase(it); // point to the next item
           }
         }
         auto tree_best = trees.at(v_best);

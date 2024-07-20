@@ -56,7 +56,37 @@ TEST_CASE("level2_co_alg") {
 }
 
 
+TEST_CASE("PartialTree3") {
+  // test zero_drv()
+  using namespace dst;
+
+  int root {0}, v {1};
+  double d_rv {1};
+  int k = 5;
+  PartialTree tree {root, v, d_rv};
+
+  tree.add_term(11, 1); // density = 2/1
+  CHECK(not tree.is_ready());
+  tree.zero_drv();
+  CHECK(not tree.is_ready()); // need at least 2 terminals
+  CHECK(eq(tree.density(), 1));
+
+  PartialTree tree2 {root, v, d_rv};
+  tree2.add_term(11, 1); // density = 2/1
+  tree2.add_term(12, 2); // density = 4/2
+  tree2.add_term(13, 4); // density = 8/3
+  CHECK(tree2.is_ready());
+  CHECK(tree2.terms_after_ready.size() == 1);
+  tree2.zero_drv();
+  CHECK(tree2.is_ready());
+  CHECK(eq(tree.density(), 1));
+  CHECK(tree2.terms_after_ready.size() == 2);
+  CHECK(tree2.terms_after_ready.front() == 12);
+}
+
+
 TEST_CASE("PartialTree2") {
+  // test erase_and_reset()
   using namespace dst;
 
   int root {0}, v {1};
