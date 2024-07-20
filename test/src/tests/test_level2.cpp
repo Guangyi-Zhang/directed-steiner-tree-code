@@ -42,6 +42,8 @@ TEST_CASE("level2_co_alg") {
   CHECK(dt.naive_alg()->cost_sc == 4);
   CHECK(dt.naive_alg()->debuginfo.at("sssp_nodes_visited") == "7"); // 5+2 dummies
 
+  auto tree = dt.level2_alg();
+
   CHECK(dt.level2_alg()->to_tree()->cost == 3);
   CHECK(dt.level2_alg()->cost_sc == 3);
   CHECK(dt.level2_alg()->debuginfo.at("sssp_nodes_visited") == "16"); // 7+(5+4)
@@ -156,11 +158,16 @@ TEST_CASE("crossing") {
 
   CHECK(dt.naive_alg()->cost == 4+4+2-1);
   CHECK(dt.naive_alg()->cost_sc == 4+4+2);
-  auto tree = dt.level2_alg(); // first pick 2->23, and then 1->{21,22}
-  CHECK(tree->cost_sc == 2+(1+3+0.2*2+3));
-  CHECK(std::abs(tree->cost_sc - tree->to_tree()->cost - 0.2) < EPSILON); // include 1->11 but 11->2
-  CHECK(std::abs(tree->to_tree()->cost_trimmed() - (tree->cost_sc-0.2*2)) < EPSILON);
+
+  // first pick 2->23, and then 1->{21,22}
+  // no, now adaptively pick 2->23, then 2->22, then 1->21
+  auto tree = dt.level2_alg();
   CHECK((tree->terms == std::unordered_set<int> {24,25,26}));
+  CHECK(tree->cost_sc == 2+3+4);
+  //CHECK(std::abs(tree->cost_sc - tree->to_tree()->cost - 0.2) < EPSILON); // include 1->11 but 11->2
+  //CHECK(std::abs(tree->to_tree()->cost_trimmed() - (tree->cost_sc-0.2*2)) < EPSILON);
+  CHECK(std::abs(tree->cost_sc - tree->to_tree()->cost) < EPSILON); // include 1->11 but 11->2
+  CHECK(std::abs(tree->to_tree()->cost_trimmed() - (tree->cost_sc)) < EPSILON);
 }
 
 

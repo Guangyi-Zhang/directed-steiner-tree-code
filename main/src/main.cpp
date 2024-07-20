@@ -43,6 +43,7 @@ auto main(int argc, char** argv) -> int {
     ("b,buildtype", "CMAKE_BUILD_TYPE", cxxopts::value<std::string>()->default_value("unknown"))
     ("m,method", "method", cxxopts::value<std::string>()->default_value("naive"))
     ("d,dataset", "dataset", cxxopts::value<std::string>()->default_value("random_graph_wFalse_p01_1000.csv"))
+    ("v,version", "version", cxxopts::value<int>()->default_value("0"))
     ("r,rep", "rep", cxxopts::value<int>()->default_value("1"))
     ("a,alpha", "alpha", cxxopts::value<double>()->default_value("0.99"))
     ("t,note", "note", cxxopts::value<std::string>()->default_value("none"))
@@ -51,21 +52,13 @@ auto main(int argc, char** argv) -> int {
 
 
   // parameters
-  // std::string version {"v1"}; // @20240616: testing
-  //std::string version {"v2"}; // @20240624: start making level2 faster
-  //std::string version {"v3"}; // @20240628: level2_co_alg ready
-  //std::string version {"v4"}; // @20240705: start making level3 faster
-  //std::string version {"v5"}; // @20240707: everything by pointers
-  //std::string version {"v6"}; // @20240710: pq for PartialTrees
-  //std::string version {"v7"}; // @20240710: start pruning
-  std::string version {"v8"}; // @20240715: start pruning2
-
   std::string buildtype = opresult["buildtype"].as<std::string>();
   std::string method = opresult["method"].as<std::string>();
   std::string dataset = opresult["dataset"].as<std::string>();
   std::string note = opresult["note"].as<std::string>();
   double alpha = opresult["alpha"].as<double>();
   int rep = opresult["rep"].as<int>();
+  int version = opresult["version"].as<int>();
 
   //std::string method {"naive"};
   //std::string method {"level2"};
@@ -194,7 +187,7 @@ auto main(int argc, char** argv) -> int {
   rapidjson::Document::AllocatorType& a = d.GetAllocator();
 
   d.SetObject();
-  d.AddMember("version", rapidjson::Value(rapidjson::StringRef(version.c_str())), a); 
+  d.AddMember("version", rapidjson::Value(version), a); 
   d.AddMember("note", rapidjson::Value(rapidjson::StringRef(note.c_str())), a); 
   d.AddMember("buildtype", rapidjson::Value(rapidjson::StringRef(opresult["buildtype"].as<std::string>().c_str())), a); 
   d.AddMember("method", rapidjson::Value(rapidjson::StringRef(method.c_str())), a); 

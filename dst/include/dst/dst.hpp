@@ -281,12 +281,15 @@ namespace dst {
 
       // iteratively add 2-level partial trees
       auto par = std::make_shared<PartialTreeManager> (r);
+      par->trace_r = trace_r;
+      par->trace_t = trace_t;
+      auto covered = std::make_shared<std::unordered_set<int>>();
       std::unordered_set<int> terms_left(terms_cand.begin(), terms_cand.end());
       while (terms_left.size() > 0) {
         // enum all v as the middle vertex in a 2-level tree
         std::shared_ptr<PartialTree> best = nullptr;
         for (auto v: V_cand) {
-          double d_rv {dists_r->at(v)};
+          double d_rv = has_key(*covered, v)? 0 : dists_r->at(v);
           auto tree_v = level2_through_v(r, v, d_rv, dists_t, terms_left);
 
           // keep the best across all v
@@ -307,7 +310,9 @@ namespace dst {
         if (DEBUG) fmt::println("level2_rooted_at_{}: #terms_left={}, best v={} and density={} and cov={}", r, terms_left.size(), best->v, best->density(), best->terms);
         for (auto t: best->terms)
           terms_left.erase(t);
-        par->append(best);
+        auto covered_by_best = par->append(best, true);
+        for (auto v: *covered_by_best)
+          covered->insert(v);
       }
 
       int sssp_nodes_visited = dists_r->size();
@@ -315,8 +320,6 @@ namespace dst {
         sssp_nodes_visited += p.second->size();
       }
       par->debuginfo["sssp_nodes_visited"] = std::to_string(sssp_nodes_visited);
-      par->trace_r = trace_r;
-      par->trace_t = trace_t;
       return par;
     }
 

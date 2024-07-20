@@ -99,6 +99,7 @@ TEST_CASE("PartialTreeTable") {
 TEST_CASE("stop_picking_next_2partree") {
   using namespace dst;
 
+  // a full binary tree
   std::vector<std::pair<int,int>> edges {std::make_pair(0,1), 
                                          std::make_pair(0,2), 
 
@@ -126,7 +127,8 @@ TEST_CASE("stop_picking_next_2partree") {
 
   auto tree2 = dt.level2_alg(); // pick 11-14 as root 
   CHECK(tree2->to_tree()->cost == 2+4+6.9+100);
-  CHECK(tree2->cost_sc == (1+1+2) * 3 + 2.9 + 2+100);
+  //CHECK(tree2->cost_sc == (1+1+2) * 3 + 2.9 + 2+100);
+  CHECK(tree2->cost_sc == (1+1+2) * 3 + 1.9 + 100);
 
   /*
   next u 1, costsc 7, cov 4

@@ -182,18 +182,27 @@ namespace dst {
       totree = std::make_shared<Tree> (root);
     };
 
-    void append(std::shared_ptr<PartialTree> tree, bool to_merge=false) {
+    auto append(std::shared_ptr<PartialTree> tree, bool to_merge=false) {
+      auto covered = std::make_shared<std::unordered_set<int>>();
+
       subtrees.push_back(std::make_pair(tree, to_merge));
       cost_sc += tree->cost_sc;
       for (auto t: tree->terms)
         terms.insert(t);
       
       if (to_merge) {
-        totree->add_arc(std::make_pair(root, tree->v), tree->d_rv, trace_r);
+        auto some = totree->add_arc(std::make_pair(root, tree->v), tree->d_rv, trace_r);
+        for (auto v: *some)
+          covered->insert(v);
+
         for (auto t: tree->terms) {
-          totree->add_arc(std::make_pair(tree->v, t), tree->distances_t.at(t), trace_t->at(t), true, true);
+          auto some = totree->add_arc(std::make_pair(tree->v, t), tree->distances_t.at(t), trace_t->at(t), true, true);
+          for (auto v: *some)
+            covered->insert(v);
         }
       }
+
+      return covered;
     }
 
     void append(std::shared_ptr<PartialTreeManager> tree, bool to_merge=false) {
