@@ -41,6 +41,11 @@ TEST_CASE("minden_by_thresholds") {
   CHECK(eq((*minden.thr_mindens)[1].second, (2+1.5*2)/2));
   CHECK(eq((*minden.thr_mindens)[2].first, 3));
   CHECK(eq((*minden.thr_mindens)[2].second, (3+1.5*2)/2));
+
+  CHECK(eq(minden.min_density(0), 0));
+  CHECK(eq(minden.min_density(1.5), 2));
+  CHECK(eq(minden.min_density(2.5), (2+1.5*2)/2));
+  CHECK(eq(minden.min_density(3.5), (3+1.5*2)/2));
 }
 
 
@@ -135,14 +140,32 @@ TEST_CASE("stop_picking_next_2partree") {
   next u 2, costsc 5.9, cov 3
   next u 14, costsc 102, cov 1
   */
+  std::vector<double> costs {7, 5.9, 100};
+  std::vector<double> dens {7/4.0, 5.9/3, 100};
   auto tree3 = dt.level3_alg_naive();
   CHECK(tree3->to_tree()->cost == 2+4+6.9+100);
   CHECK(tree3->cost_sc == (1+2+4) + (4+1.9) + 100);
+  int i = 0;
+  for (auto d: tree3->density1by1) {
+    CHECK(eq(d, dens[i])); i++;
+  }
+  i = 0;
+  for (auto c: tree3->costsc1by1) {
+    CHECK(eq(c, costs[i])); i++;
+  }
 
   auto fast3 = dt.level3_alg();
   //CHECK(fast3->cost_sc == (1+2+4) + (4+1.9) + 2+100);
-  CHECK(fast3->cost_sc == (1+2*4) + (4+1.9) + 2+100); // this is fine
+  CHECK(fast3->cost_sc == (1+2+4) + (4+1.9) + 100); 
   CHECK(fast3->to_tree()->cost == 2+4+6.9+100);
+  i = 0;
+  for (auto d: fast3->density1by1) {
+    CHECK(eq(d, dens[i])); i++;
+  }
+  i = 0;
+  for (auto c: fast3->costsc1by1) {
+    CHECK(eq(c, costs[i])); i++;
+  }
 }
 
 

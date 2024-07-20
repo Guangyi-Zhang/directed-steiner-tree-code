@@ -197,6 +197,9 @@ namespace dst {
     std::vector<std::pair<std::shared_ptr<PartialTree>, bool>> subtrees; // used as r->{v}->{t}
     std::vector<std::pair<std::shared_ptr<PartialTreeManager>, bool>> trees; // used as r->{u}->{v}->{t}
 
+    std::list<double> density1by1; // for testing
+    std::list<double> costsc1by1; // for testing
+
     PartialTreeManager() {}; // only for nullptr
 
     PartialTreeManager(int r) {
@@ -446,7 +449,6 @@ namespace dst {
     int n_thresholds;
     double thr_max;
     std::shared_ptr<std::vector<std::pair<double,double>>> thr_mindens;
-    int thr_idx = -1;
 
     ThresholdedMinDensity(
         int n_thresholds, 
@@ -486,30 +488,27 @@ namespace dst {
       }
     };
 
-    void reset_thr() {
-      thr_idx = -1;
-    }
-
-
     double min_density(double d_rv) {
-      // called with increasing d_rv!
+      int left = 0;
+      int right = thr_mindens->size() - 1;
+      int idx = -1;
 
-      // find the largest thr_idx <= d_rv
-      while (true) {
-        if (thr_idx == thr_mindens->size() - 1)
-          break;
+      // binary search the largest thr_idx <= d_rv
+      while (left <= right) {
+        int mid = left + (right - left) / 2;
 
-        double thr_next = (*thr_mindens)[thr_idx+1].first;
-        if (leq(thr_next, d_rv))
-          thr_idx += 1;
-        else
-          break;
-      } 
-
-      if (thr_idx >= 0) {
-        return (*thr_mindens)[thr_idx].second;
+        if (lq((*thr_mindens)[mid].first, d_rv)) {
+          idx = mid;
+          left = mid + 1;
+        } else {
+          right = mid - 1;
+        }
       }
-      return -1;
+
+      if (idx >= 0) {
+        return (*thr_mindens)[idx].second;
+      }
+      return 0;
     }
 
   };

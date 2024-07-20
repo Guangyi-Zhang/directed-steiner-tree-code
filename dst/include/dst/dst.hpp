@@ -342,7 +342,7 @@ namespace dst {
     }
 
 
-    auto level3_alg(double alpha=0.99, int n_thresholds=10) {
+    auto level3_alg(double alpha=1.0, int n_thresholds=10) {
       /*---------------
        | Pre-compute
        --------------*/
@@ -422,13 +422,16 @@ namespace dst {
         }
         if (best2 == nullptr or best2->terms.size() == 0)
           break;
+        if (DEBUG) fmt::println("best2 v={}, cost_sc={}, #terms={}", best2->v, best2->cost_sc, best2->terms.size());
         best->append(best2);
 
         // ***** find the best 3-level partree *****
         for (auto u: V) {
           double d_ru = has_key(*covered, u)? 0 : dists_r->at(u);
-          if (leq(alpha * best->density(), best2->density() - d_ru)) {
-            break;
+          if (leq(alpha * best->density(), best2->density() - dists_r->at(u))) {
+            // it is fine to skip root=u, same as best2
+            // TODO: can't -d_ru for d_ru=0 by covered
+            continue;
           }
 
           auto Q_u = &(Q.at(u));
@@ -525,22 +528,22 @@ namespace dst {
             double den_new = (tree_u->cost_sc + tree2_u->cost_sc) / 
               (terms_left.size() - terms_left_u.size() + tree2_u->terms.size());
             if (terms_left.size() > terms_left_u.size()) { // skip 1st iteration
-              double den_u = tree_u->cost_sc / (terms_left.size() - terms_left_u.size());
-              if (lq(den_u, den_new))
+              if (lq(tree_u->density(), den_new))
                 break;
             }
 
             // ***** merge tree2_u: best among tree2_uv *****
-            if (DEBUG) fmt::println("u={} adds partree rooted at v={}, #terms={}", u, tree2_u->v, tree2_u->terms.size());
-            tree_u->append(tree2_u->copy());
+            if (DEBUG) fmt::println("u={} adds partree rooted at v={}, cost_sc={}, #terms={}", u, tree2_u->v, tree2_u->cost_sc, tree2_u->terms.size());
+            auto tree2_u_cp = tree2_u->copy();
+            tree_u->append(tree2_u_cp);
+            if (DEBUG) fmt::println("tree_u cost_sc={}, #terms={}", tree_u->cost_sc, tree_u->terms.size());
             if (best == nullptr or lq(tree_u->density(), best->density())) {
               best = tree_u;
             }
             for (auto t: tree2_u->terms) {
               terms_left_u.erase(t);
             }
-            tree2_u_old = tree2_u;
-            thrminden.reset_thr();
+            tree2_u_old = tree2_u_cp;
           } // end of processing vertex u
         } // found a greedy 3-level partree
 
@@ -553,9 +556,11 @@ namespace dst {
         }
         thrminden = ThresholdedMinDensity(n_thresholds, dist_max, tbls);
         auto covered_by_best = tree3->append(best, true);
+        tree3->density1by1.push_back(best->density()); // for teting
+        tree3->costsc1by1.push_back(best->cost_sc); // for testing
         for (auto v: *covered_by_best)
           covered->insert(v);
-        if (DEBUG) fmt::println("add partree r-u={}, cost_sc={}, #terms={}", best->u, best->cost_sc, best->terms.size());
+        if (DEBUG) fmt::println("add partree r-u={}, r-v={}, cost_sc={}, #terms={}", best->u, (best->subtrees.size() > 0)? best->subtrees[0].first->v: -1, best->cost_sc, best->terms.size());
       }
 
       int sssp_nodes_visited = dists_r->size();
@@ -646,6 +651,8 @@ namespace dst {
         for (auto t: best->terms)
           terms_left.erase(t);
         auto covered_by_best = tree3->append(best, true);
+        tree3->density1by1.push_back(best->density()); // for teting
+        tree3->costsc1by1.push_back(best->cost_sc); // for testing
         for (auto v: *covered_by_best)
           covered->insert(v);
         if (DEBUG) fmt::println("add partree r-u={}, cost_sc={}, #terms={}", best->u, best->cost_sc, best->terms.size());
