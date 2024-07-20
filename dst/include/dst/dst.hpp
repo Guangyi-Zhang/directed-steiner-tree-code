@@ -401,13 +401,22 @@ namespace dst {
        --------------------------------*/
       std::unordered_set<int> terms_left(terms_dm.begin(), terms_dm.end());
       auto tree3 = std::make_shared<PartialTreeManager> (root);
+      auto trace_u = std::make_shared<std::unordered_map<int, std::shared_ptr<std::unordered_map<int,int>>>>();
+      for (auto &p: sssp_u) {
+        (*trace_u)[p.first] = p.second.trace;
+      }
+      tree3->trace_r = trace_r;
+      tree3->trace_u = trace_u;
+      tree3->trace_t = trace_t;
+      auto covered = std::make_shared<std::unordered_set<int>>();
       // ***** iterative add 3-level partial trees *****
       while (terms_left.size() > 0) {
         // best 2-level partree as initial UB 
         auto best = std::make_shared<PartialTreeManager> (root);
         std::shared_ptr<PartialTree> best2 = nullptr;
         for (auto v: V) {
-          auto tree2_rv = level2_through_v(root, v, dists_r->at(v), dists_t, terms_left);
+          double d_rv = has_key(*covered, v)? 0 : dists_r->at(v);
+          auto tree2_rv = level2_through_v(root, v, d_rv, dists_t, terms_left);
           if (best2 == nullptr or best2->density() > tree2_rv->density())
             best2 = tree2_rv;
         }
@@ -417,13 +426,14 @@ namespace dst {
 
         // ***** find the best 3-level partree *****
         for (auto u: V) {
-          if (leq(alpha * best->density(), best2->density() - dists_r->at(u))) {
+          double d_ru = has_key(*covered, u)? 0 : dists_r->at(u);
+          if (leq(alpha * best->density(), best2->density() - d_ru)) {
             break;
           }
 
           auto Q_u = &(Q.at(u));
           auto &sssp = sssp_u.at(u);
-          auto tree_u = std::make_shared<PartialTreeManager> (root, u, dists_r->at(u));
+          auto tree_u = std::make_shared<PartialTreeManager> (root, u, d_ru);
           std::shared_ptr<PartialTree> tree2_u_old = nullptr;
           std::unordered_set<int> terms_left_u(terms_left.begin(), terms_left.end());
           int niter_u = 0;
@@ -542,7 +552,9 @@ namespace dst {
           p.second.erase(best->terms);
         }
         thrminden = ThresholdedMinDensity(n_thresholds, dist_max, tbls);
-        tree3->append(best);
+        auto covered_by_best = tree3->append(best, true);
+        for (auto v: *covered_by_best)
+          covered->insert(v);
         if (DEBUG) fmt::println("add partree r-u={}, cost_sc={}, #terms={}", best->u, best->cost_sc, best->terms.size());
       }
 
@@ -550,15 +562,10 @@ namespace dst {
       for (auto &p: *dists_t) {
         sssp_nodes_visited += p.second->size();
       }
-      auto trace_u = std::make_shared<std::unordered_map<int, std::shared_ptr<std::unordered_map<int,int>>>>();
       for (auto &p: sssp_u) {
         sssp_nodes_visited += p.second.distances->size();
-        (*trace_u)[p.first] = p.second.trace;
       }
       tree3->debuginfo["sssp_nodes_visited"] = std::to_string(sssp_nodes_visited);
-      tree3->trace_r = trace_r;
-      tree3->trace_u = trace_u;
-      tree3->trace_t = trace_t;
       return tree3;
     }
 
@@ -640,6 +647,7 @@ namespace dst {
         auto covered_by_best = tree3->append(best, true);
         for (auto v: *covered_by_best)
           covered->insert(v);
+        if (DEBUG) fmt::println("add partree r-u={}, cost_sc={}, #terms={}", best->u, best->cost_sc, best->terms.size());
       }
 
       int sssp_nodes_visited = dists_r->size();
