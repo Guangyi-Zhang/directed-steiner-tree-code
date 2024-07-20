@@ -179,7 +179,7 @@ namespace dst {
       auto tree = std::make_shared<Tree> (root);
       tree->add_arc(std::make_pair(root, v), d_rv, trace_r);
       for (auto t: terms) {
-        tree->add_arc(std::make_pair(v, t), distances_t.at(t), trace_t->at(t), true, true);
+        tree->add_arc(std::make_pair(v, t), distances_t.at(t), trace_t->at(t), nullptr, true, true);
       }
       return tree;
     }
@@ -220,80 +220,115 @@ namespace dst {
         terms.insert(t);
       
       if (to_merge) {
-        auto some = totree->add_arc(std::make_pair(root, tree->v), tree->d_rv, trace_r);
-        for (auto v: *some)
-          covered->insert(v);
+        totree->add_arc(std::make_pair(root, tree->v), tree->d_rv, trace_r, covered);
 
         for (auto t: tree->terms) {
-          auto some = totree->add_arc(std::make_pair(tree->v, t), tree->distances_t.at(t), trace_t->at(t), true, true);
-          for (auto v: *some)
-            covered->insert(v);
+          totree->add_arc(std::make_pair(tree->v, t), tree->distances_t.at(t), trace_t->at(t), covered, true, true);
         }
       }
 
       return covered;
     }
 
-    void append(std::shared_ptr<PartialTreeManager> tree, bool to_merge=false) {
+    auto append(std::shared_ptr<PartialTreeManager> tree, bool to_merge=false) {
+      auto covered = std::make_shared<std::unordered_set<int>>();
+
       trees.push_back(std::make_pair(tree, to_merge));
       cost_sc += tree->cost_sc;
       for (auto t: tree->terms)
         terms.insert(t);
 
-      if (to_merge) {
-        // TODO
-      }
-    }
+      // helper for subtree
+      auto add_subtree = [&](std::shared_ptr<PartialTree> tree2, int u_=NONVERTEX) {
+        auto r = u_==NONVERTEX? root : u_;
+        auto trace_ = u_==NONVERTEX? trace_r : (*trace_u)[u_];
+        totree->add_arc(std::make_pair(r, tree2->v), tree2->d_rv, trace_, covered);
+        for (auto t: tree2->terms) {
+          totree->add_arc(std::make_pair(tree2->v, t), tree2->distances_t.at(t), trace_t->at(t), covered, true, true);
+        }
+      };
+      
+      // helper for tree
+      auto add_tree = [&](const PartialTreeManager *tree3) {
+        totree->add_arc(std::make_pair(tree3->root, tree3->u), tree3->d_ru, trace_r, covered);
 
-    auto to_tree () {
-      // a helper
-      auto to_tree3 = [&] (const PartialTreeManager *tree3) {
-        totree->add_arc(std::make_pair(tree3->root, tree3->u), tree3->d_ru, trace_r);
         for (auto tree2_flag: tree3->subtrees) {
           if (tree2_flag.second) 
             continue;
-          auto tree2 = tree2_flag.first;
-          totree->add_arc(std::make_pair(tree3->u, tree2->v), tree2->d_rv, (*trace_u)[tree3->u]);
-          for (auto t: tree2->terms) {
-            totree->add_arc(std::make_pair(tree2->v, t), tree2->distances_t.at(t), trace_t->at(t), true, true);
-          }
+          add_subtree(tree2_flag.first, tree3->u);
         }
       };
 
-      if (u != NONVERTEX) {
-        // building r->u->{v}-{t}
-        to_tree3(this);
-      } else {
-        // building r->{u}->{v}-{t}
+      if (to_merge) {
+        if (tree->u != NONVERTEX) {
+          // could be r->{u}->{v}-{t}
+          add_tree(tree.get());
+        } 
+        else {
+          // could be r->{v}-{t}
+          // appended 2-level to a manager w/ u
+          for (auto tree2_flag: tree->subtrees) {
+            if (tree2_flag.second)
+              continue;
+            add_subtree(tree2_flag.first);
+          }
+        }
+      }
+
+      return covered;
+    }
+
+    auto to_tree () {
+      // helper for subtree
+      auto add_subtree = [&](std::shared_ptr<PartialTree> tree2, int u_=NONVERTEX) {
+        auto r = u_==NONVERTEX? root : u_;
+        auto trace_ = u_==NONVERTEX? trace_r : (*trace_u)[u_];
+        totree->add_arc(std::make_pair(r, tree2->v), tree2->d_rv, trace_);
+        for (auto t: tree2->terms) {
+          totree->add_arc(std::make_pair(tree2->v, t), tree2->distances_t.at(t), trace_t->at(t), nullptr, true, true);
+        }
+      };
+      
+      // helper for tree
+      auto add_tree = [&](const PartialTreeManager *tree3) {
+        totree->add_arc(std::make_pair(tree3->root, tree3->u), tree3->d_ru, trace_r);
+
+        for (auto tree2_flag: tree3->subtrees) {
+          if (tree2_flag.second) 
+            continue;
+          add_subtree(tree2_flag.first, tree3->u);
+        }
+      };
+
+      if (u != NONVERTEX) { // add r->u->{v}->{t}
+        add_tree(this);
+      }
+      else {
         for (auto tree3_flag: trees) {
           if (tree3_flag.second)
             continue;
           auto tree3 = tree3_flag.first;
+
           if (tree3->u != NONVERTEX) {
-            to_tree3(tree3.get());
-          } else {
+            // could be r->{u}->{v}-{t}
+            add_tree(tree3.get());
+          } 
+          else {
+            // could be r->{v}-{t}
             // appended 2-level to a manager w/ u
             for (auto tree2_flag: tree3->subtrees) {
               if (tree2_flag.second)
                 continue;
-              auto tree2 = tree2_flag.first;
-              totree->add_arc(std::make_pair(root, tree2->v), tree2->d_rv, trace_r);
-              for (auto t: tree2->terms) {
-                totree->add_arc(std::make_pair(tree2->v, t), tree2->distances_t.at(t), trace_t->at(t), true, true);
-              }
+              add_subtree(tree2_flag.first);
             }
           }
         }
 
-        // building r->{v}-{t}
+        // could be r->{v}-{t}
         for (auto tree2_flag: subtrees) {
           if (tree2_flag.second)
             continue;
-          auto tree2 = tree2_flag.first;
-          totree->add_arc(std::make_pair(root, tree2->v), tree2->d_rv, trace_r);
-          for (auto t: tree2->terms) {
-            totree->add_arc(std::make_pair(tree2->v, t), tree2->distances_t.at(t), trace_t->at(t), true, true);
-          }
+          add_subtree(tree2_flag.first);
         }
       }
 

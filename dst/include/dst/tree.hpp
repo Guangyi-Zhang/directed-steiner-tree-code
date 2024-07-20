@@ -50,18 +50,17 @@ namespace dst {
       trace[root] = NONVERTEX;
     }
 
-    auto add_arc(
+    void add_arc(
         std::pair<int,int> arc, 
         double w_arc, 
         const std::shared_ptr<std::unordered_map<int,int>> trace_arc, 
+        std::shared_ptr<std::unordered_set<int>> covered=nullptr,
         bool reverse=false,
         bool is_terminal=false) {
       // start from Tree(root), arcs must be added from top-down
       // i.e., arc.first must exist already beforehand
-      auto covered = std::make_shared<std::unordered_set<int>>();
-
       if (arc.first == arc.second)
-        return covered;
+        return;
 
       if (is_terminal)
         terms_cov.insert(arc.second);
@@ -87,11 +86,10 @@ namespace dst {
           // ok to shortcut 
           break;
         }
-        covered->insert(v);
+        if (covered != nullptr) 
+          covered->insert(v);
         v = trace_arc->at(v);
       }
-
-      return covered;
     }
 
     double density() const {

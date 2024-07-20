@@ -586,16 +586,22 @@ namespace dst {
 
       std::unordered_set<int> terms_left(terms_dm.begin(), terms_dm.end());
       auto tree3 = std::make_shared<PartialTreeManager> (root);
+      tree3->trace_r = trace_r;
+      tree3->trace_u = trace_u;
+      tree3->trace_t = trace_t;
+      auto covered = std::make_shared<std::unordered_set<int>>();
       // iterative add 3-level partial trees
       while (terms_left.size() > 0) {
         std::shared_ptr<PartialTreeManager> best = nullptr;
 
+        // loop each u
         for (auto u: V) {
           auto dists_uv = dists_u->at(u);
-          auto tree_u = std::make_shared<PartialTreeManager> (root, u, dists_r->at(u));
+          double d_ru = has_key(*covered, u)? 0 : dists_r->at(u);
+          auto tree_u = std::make_shared<PartialTreeManager> (root, u, d_ru);
           std::unordered_set<int> terms_left_u(terms_left.begin(), terms_left.end());
 
-          // iterative add 2-level partial trees
+          // iterative add 2-level partial trees by looping each v
           while (terms_left_u.size() > 0) {
             std::shared_ptr<PartialTree> tree2_u = nullptr;
             for (auto v: V) {
@@ -624,14 +630,16 @@ namespace dst {
             for (auto t: tree2_u->terms) {
               terms_left_u.erase(t);
             }
-          }
-        }
+          } // end of looping v
+        } // end of looping u
 
         if (best == nullptr or best->terms.size() == 0)
           break;
         for (auto t: best->terms)
           terms_left.erase(t);
-        tree3->append(best);
+        auto covered_by_best = tree3->append(best, true);
+        for (auto v: *covered_by_best)
+          covered->insert(v);
       }
 
       int sssp_nodes_visited = dists_r->size();
@@ -642,9 +650,6 @@ namespace dst {
         sssp_nodes_visited += p.second->size();
       }
       tree3->debuginfo["sssp_nodes_visited"] = std::to_string(sssp_nodes_visited);
-      tree3->trace_r = trace_r;
-      tree3->trace_u = trace_u;
-      tree3->trace_t = trace_t;
       return tree3;
     }
 
@@ -673,7 +678,7 @@ namespace dst {
 
         // include the best shortest path
         if (t_min != NONVERTEX) {
-          tree->add_arc(std::make_pair(root, t_min), (*dists)[t_min], trace, false, true);
+          tree->add_arc(std::make_pair(root, t_min), (*dists)[t_min], trace, nullptr, false, true);
           terms_left.erase(t_min);
 
           // zero weight for covered arcs
@@ -703,7 +708,7 @@ namespace dst {
         if (not has_key(*trace, t))
           continue; // disconnected graph
 
-        tree->add_arc(std::make_pair(root, t), (*dists)[t], trace, false, true);
+        tree->add_arc(std::make_pair(root, t), (*dists)[t], trace, nullptr, false, true);
       }
 
       tree->debuginfo["sssp_nodes_visited"] = std::to_string(dists->size());
