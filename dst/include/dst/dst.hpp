@@ -417,7 +417,7 @@ namespace dst {
         for (auto v: V) {
           double d_rv = has_key(*covered, v)? 0 : dists_r->at(v);
           auto tree2_rv = level2_through_v(root, v, d_rv, dists_t, terms_left);
-          if (best2 == nullptr or best2->density() > tree2_rv->density())
+          if (best2 == nullptr or lq(tree2_rv->density(), best2->density()))
             best2 = tree2_rv;
         }
         if (best2 == nullptr or best2->terms.size() == 0)
@@ -460,7 +460,7 @@ namespace dst {
               Q[u] = std::move(Q_new); Q_u = &(Q.at(u));
 
               auto [den, niter, d_uv, v, tree2_uv] = Q_u->top();
-              if (tree2_u == nullptr or tree2_u->density() > tree2_uv->density()) {
+              if (tree2_u == nullptr or lq(tree2_uv->density(), tree2_u->density())) {
                 tree2_u = tree2_uv;
               }
             }
@@ -477,7 +477,7 @@ namespace dst {
                 std::tie(den, niter, d_uv, v, tree2_uv) = Q_u->top();
               }
 
-              if (tree2_u == nullptr or tree2_u->density() > tree2_uv->density()) {
+              if (tree2_u == nullptr or lq(tree2_uv->density(), tree2_u->density())) {
                 tree2_u = tree2_uv;
               }
             }
@@ -488,7 +488,7 @@ namespace dst {
               auto [v, d_uv] = sssp.next(); // even after reaching all v, most pq has huge amount left
               if (v == NONVERTEX)
                 break;
-              if (u != root and v == root)
+              if (u != root and v == root) // allow u == v
                 continue;
 
               // try to early-terminate sssp
@@ -500,7 +500,7 @@ namespace dst {
                 is_u_pruned = true;
                 break;
               }
-              double tree_u_LB = (tree_u->cost_sc + denlb * (terms_left.size() - tree_u->terms.size())) / terms_left.size();
+              double tree_u_LB = (tree_u->cost_sc + denlb * terms_left_u.size()) / terms_left.size();
               if (leq(alpha * best->density(), tree_u_LB)) {
                 is_u_pruned = true;
                 break;
@@ -508,13 +508,13 @@ namespace dst {
 
               double den = tbls.at(v).density(d_uv); // a lower bound of true tree2_uv
               if (tree2_u != nullptr and leq(tree2_u->density(), den)) {
-                Q_u->emplace(den, niter_u, d_uv, v, nullptr);
+                Q_u->emplace(den, niter_u, d_uv, v, nullptr); // lazy evaluate tree2_uv
                 continue;
               }
 
               auto tree2_uv = tbls.at(v).partree(u, d_uv, &terms_left_u);
               Q_u->emplace(tree2_uv->density(), niter_u, d_uv, v, tree2_uv);
-              if (tree2_u == nullptr or tree2_u->density() > tree2_uv->density()) {
+              if (tree2_u == nullptr or lq(tree2_uv->density(), tree2_u->density())) {
                 tree2_u = tree2_uv;
               }
             }
@@ -526,14 +526,14 @@ namespace dst {
               (terms_left.size() - terms_left_u.size() + tree2_u->terms.size());
             if (terms_left.size() > terms_left_u.size()) { // skip 1st iteration
               double den_u = tree_u->cost_sc / (terms_left.size() - terms_left_u.size());
-              if (den_u <= den_new)
+              if (lq(den_u, den_new))
                 break;
             }
 
             // ***** merge tree2_u: best among tree2_uv *****
             if (DEBUG) fmt::println("u={} adds partree rooted at v={}, #terms={}", u, tree2_u->v, tree2_u->terms.size());
             tree_u->append(tree2_u->copy());
-            if (best == nullptr or best->density() > tree_u->density()) {
+            if (best == nullptr or lq(tree_u->density(), best->density())) {
               best = tree_u;
             }
             for (auto t: tree2_u->terms) {
@@ -612,32 +612,33 @@ namespace dst {
           while (terms_left_u.size() > 0) {
             std::shared_ptr<PartialTree> tree2_u = nullptr;
             for (auto v: V) {
-              if ((u != root and v == root) or not has_key(*dists_uv, v))
+              if ((u != root and v == root) or not has_key(*dists_uv, v)) // allow u == v
                 continue;
               auto tree2_uv = level2_through_v(u, v, dists_uv->at(v), dists_t, terms_left_u);
               if (tree2_u == nullptr or tree2_u->density() > tree2_uv->density())
                 tree2_u = tree2_uv;
-            }
+            } // end of looping v
             if (tree2_u == nullptr or tree2_u->terms.size() == 0)
               break;
 
+            // try the best tree2_u
             double den_new = (tree_u->cost_sc + tree2_u->cost_sc) / 
               (terms_left.size() - terms_left_u.size() + tree2_u->terms.size());
             if (terms_left.size() > terms_left_u.size()) { // skip 1st iteration
               double den_u = tree_u->cost_sc / (terms_left.size() - terms_left_u.size());
-              if (den_u <= den_new)
+              if (lq(den_u, den_new))
                 break;
             }
 
             // merge tree2_u
             tree_u->append(tree2_u);
-            if (best == nullptr or best->density() > tree_u->density()) {
+            if (best == nullptr or lq(tree_u->density(), best->density())) {
               best = tree_u;
             }
             for (auto t: tree2_u->terms) {
               terms_left_u.erase(t);
             }
-          } // end of looping v
+          } // end of one u
         } // end of looping u
 
         if (best == nullptr or best->terms.size() == 0)
