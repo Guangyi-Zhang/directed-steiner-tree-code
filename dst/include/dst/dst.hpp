@@ -310,7 +310,7 @@ namespace dst {
           if (best == nullptr or
               tree_v->density() < best->density() or // breaking tie
               (std::abs(tree_v->density() - best->density()) < EPSILON and 
-               tree_v->terms.size() > best->terms.size())) { //
+               tree_v->terms.size() > best->terms.size())) {
             best = tree_v;
           }
         }
@@ -438,7 +438,11 @@ namespace dst {
           auto &sssp = sssp_u.at(u);
           auto tree_u = std::make_shared<PartialTreeManager> (root, u, d_ru);
           std::shared_ptr<PartialTree> tree2_u_old = nullptr;
-          std::unordered_set<int> terms_left_u(terms_left.begin(), terms_left.end());
+          std::unordered_set<int> terms_left_u;
+          for (auto t: terms_left) {
+            if (has_key(*(dists_t->at(t)), u))
+              terms_left_u.insert(t);
+          }
           int niter_u = 0;
           bool is_u_pruned = false;
 
@@ -501,7 +505,7 @@ namespace dst {
                 is_u_pruned = true;
                 break;
               }
-              double tree_u_LB = (tree_u->cost_sc + denlb * terms_left_u.size()) / terms_left.size();
+              double tree_u_LB = (tree_u->cost_sc + denlb * terms_left_u.size()) / (terms_left_u.size() + tree_u->terms.size());
               if (leq(alpha * best->density(), tree_u_LB)) {
                 is_u_pruned = true;
                 break;
@@ -524,11 +528,9 @@ namespace dst {
             if (is_u_pruned or tree2_u == nullptr or tree2_u->terms.size() == 0)
               break;
             double den_new = (tree_u->cost_sc + tree2_u->cost_sc) / 
-              (terms_left.size() - terms_left_u.size() + tree2_u->terms.size());
-            if (terms_left.size() > terms_left_u.size()) { // skip 1st iteration
-              if (lq(tree_u->density(), den_new))
-                break;
-            }
+              (tree_u->terms.size() + tree2_u->terms.size());
+            if (not tree_u->terms.empty() and lq(tree_u->density(), den_new))
+              break;
 
             // ***** merge tree2_u: best among tree2_uv *****
             if (DEBUG) fmt::println("u={} adds partree rooted at v={}, cost_sc={}, #terms={}", u, tree2_u->v, tree2_u->cost_sc, tree2_u->terms.size());
@@ -609,7 +611,11 @@ namespace dst {
           auto dists_uv = dists_u->at(u);
           double d_ru = has_key(*covered, u)? 0 : dists_r->at(u);
           auto tree_u = std::make_shared<PartialTreeManager> (root, u, d_ru);
-          std::unordered_set<int> terms_left_u(terms_left.begin(), terms_left.end());
+          std::unordered_set<int> terms_left_u;
+          for (auto t: terms_left) {
+            if (has_key(*(dists_t->at(t)), u))
+              terms_left_u.insert(t);
+          }
 
           // iterative add 2-level partial trees by looping each v
           while (terms_left_u.size() > 0) {
@@ -626,11 +632,9 @@ namespace dst {
 
             // try the best tree2_u
             double den_new = (tree_u->cost_sc + tree2_u->cost_sc) / 
-              (terms_left.size() - terms_left_u.size() + tree2_u->terms.size());
-            if (terms_left.size() > terms_left_u.size()) { // skip 1st iteration
-              if (lq(tree_u->density(), den_new))
-                break;
-            }
+              (tree_u->terms.size() + tree2_u->terms.size());
+            if (not tree_u->terms.empty() and lq(tree_u->density(), den_new))
+              break;
 
             // merge tree2_u
             tree_u->append(tree2_u);
