@@ -126,7 +126,7 @@ TEST_CASE("stop_picking_next_2partree") {
   std::vector<int> terms {21,22,23,24,25,26,27,28};
   DST dt = DST(edges, weights, 0, terms);
 
-  auto tree_naive = dt.naive_alg();
+  auto tree_naive = dt.level1_alg();
   CHECK(tree_naive->cost_sc == 3*6+2.9+2+100);
   CHECK(tree_naive->cost == 2+4+6.9+100);
 
@@ -142,7 +142,7 @@ TEST_CASE("stop_picking_next_2partree") {
   */
   std::vector<double> costs {7, 5.9, 100};
   std::vector<double> dens {7/4.0, 5.9/3, 100};
-  auto tree3 = dt.level3_alg_naive();
+  auto tree3 = dt.level3_alg();
   CHECK(tree3->to_tree()->cost == 2+4+6.9+100);
   CHECK(tree3->cost_sc == (1+2+4) + (4+1.9) + 100);
   int i = 0;
@@ -154,7 +154,7 @@ TEST_CASE("stop_picking_next_2partree") {
     CHECK(eq(c, costs[i])); i++;
   }
 
-  auto fast3 = dt.level3_alg();
+  auto fast3 = dt.fast_level3_alg();
   //CHECK(fast3->cost_sc == (1+2+4) + (4+1.9) + 2+100);
   CHECK(fast3->cost_sc == (1+2+4) + (4+1.9) + 100); 
   CHECK(fast3->to_tree()->cost == 2+4+6.9+100);
@@ -193,7 +193,7 @@ TEST_CASE("two_3level_partrees") {
   std::vector<int> terms {21,22,23,24,25,26,27,28};
   DST dt = DST(edges, weights, 0, terms);
 
-  auto tree_naive = dt.naive_alg();
+  auto tree_naive = dt.level1_alg();
   CHECK(tree_naive->cost_sc == 3*8);
   CHECK(tree_naive->cost == 2+4+8);
 
@@ -201,7 +201,7 @@ TEST_CASE("two_3level_partrees") {
   CHECK(tree2->to_tree()->cost == 2+4+8);
   CHECK(tree2->cost_sc == (1+1+2) * 4);
 
-  auto tree3 = dt.level3_alg_naive();
+  auto tree3 = dt.level3_alg();
   CHECK(tree3->to_tree()->cost == 2+4+8);
   CHECK(tree3->cost_sc == 2 * (1+2+4));
 }
@@ -242,7 +242,7 @@ TEST_CASE("level3_alg") {
   std::vector<int> terms {21,22,23,24};
   DST dt = DST(edges, weights, 0, terms);
 
-  auto tree_naive = dt.naive_alg();
+  auto tree_naive = dt.level1_alg();
   CHECK(tree_naive->cost_sc == (2+2) * 4);
   CHECK(tree_naive->cost == (2 + 2*2) * 2);
 
@@ -251,12 +251,12 @@ TEST_CASE("level3_alg") {
   CHECK(tree2->cost_sc == (2 + 2*2) * 2);
   CHECK((tree2->terms == std::unordered_set<int> {25,26,27,28}));
 
-  auto tree3 = dt.level3_alg_naive();
+  auto tree3 = dt.level3_alg();
   CHECK(tree3->to_tree()->cost == 4 + 2*1.5 + 4*1);
   CHECK(tree3->cost_sc == 4 + 2*1.5 + 4*1);
   CHECK((tree3->terms == std::unordered_set<int> {25,26,27,28}));
 
-  auto fast3 = dt.level3_alg();
+  auto fast3 = dt.fast_level3_alg();
   CHECK(fast3->to_tree()->cost == 4 + 2*1.5 + 4*1);
   CHECK(fast3->cost_sc == 4 + 2*1.5 + 4*1);
   CHECK((fast3->terms == std::unordered_set<int> {25,26,27,28}));

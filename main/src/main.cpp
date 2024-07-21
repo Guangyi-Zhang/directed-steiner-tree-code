@@ -60,18 +60,6 @@ auto main(int argc, char** argv) -> int {
   int rep = opresult["rep"].as<int>();
   int version = opresult["version"].as<int>();
 
-  //std::string method {"naive"};
-  //std::string method {"level2"};
-  //std::string method {"level2co"};
-  //std::string method {"level3naive"};
-  //std::string method {"level3"};
-
-  //std::string dataset {"random_graph_wTrue_p01_1000.csv"};
-  //std::string dataset {"random_graph_wFalse_p01_1000.csv"};
-  //std::string dataset {"random_graph_wFalse_p002_1000.csv"};
-  //std::string dataset {"random_graph_wTrue_p002_1000.csv"};
-  //std::string dataset {"soc-Epinions1.txt"};
-
   // load data
   std::vector<std::pair<int,int>> edges;
   std::vector<double> weights;
@@ -143,12 +131,12 @@ auto main(int argc, char** argv) -> int {
   std::shared_ptr<Tree> tree = nullptr;
   std::shared_ptr<PartialTreeManager> partree = nullptr;
   std::unordered_map<std::string, std::string> *debuginfo = nullptr;
-  if (method.compare("naive") == 0) {
-    tree = dt.naive_alg();
+  if (method.compare("level1") == 0) {
+    tree = dt.level1_alg();
     debuginfo = &(tree->debuginfo);
   }
-  else if (method.compare("adpnaive") == 0) {
-    tree = dt.adaptive_naive_alg();
+  else if (method.compare("adpnaive_level1") == 0) {
+    tree = dt.adaptive_level1_alg();
     debuginfo = &(tree->debuginfo);
   }
   else if (method.compare("level2") == 0) {
@@ -156,18 +144,18 @@ auto main(int argc, char** argv) -> int {
     tree = partree->to_tree();
     debuginfo = &(partree->debuginfo);
   }
-  else if (method.compare("level2co") == 0) {
-    partree = dt.level2_co_alg();
-    tree = partree->to_tree();
-    debuginfo = &(partree->debuginfo);
-  }
-  else if (method.compare("level3naive") == 0) {
-    partree = dt.level3_alg_naive();
+  else if (method.compare("fast_level2") == 0) {
+    partree = dt.fast_level2_alg();
     tree = partree->to_tree();
     debuginfo = &(partree->debuginfo);
   }
   else if (method.compare("level3") == 0) {
-    partree = dt.level3_alg(alpha);
+    partree = dt.level3_alg();
+    tree = partree->to_tree();
+    debuginfo = &(partree->debuginfo);
+  }
+  else if (method.compare("fast_level3") == 0) {
+    partree = dt.fast_level3_alg(alpha);
     tree = partree->to_tree();
     debuginfo = &(partree->debuginfo);
   }

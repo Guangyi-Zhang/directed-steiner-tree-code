@@ -18,7 +18,7 @@
 #include "tests/test_level3.cpp"
 
 
-TEST_CASE("adaptive_naive") {
+TEST_CASE("adaptive_level1") {
   using namespace dst;
 
   std::vector<std::pair<int,int>> edges {std::make_pair(0,1), 
@@ -28,16 +28,16 @@ TEST_CASE("adaptive_naive") {
   std::vector<int> terms {1,2};
   DST dt = DST(edges, weights, 0, terms);
 
-  CHECK(dt.naive_alg()->cost == 1+1);
-  CHECK(dt.naive_alg()->cost_sc == 1+1);
+  CHECK(dt.level1_alg()->cost == 1+1);
+  CHECK(dt.level1_alg()->cost_sc == 1+1);
 
-  auto tree = dt.adaptive_naive_alg();
+  auto tree = dt.adaptive_level1_alg();
   CHECK(tree->cost == 1.9);
   CHECK(tree->cost_sc == 1.9);
 }
 
 
-TEST_CASE("naive") {
+TEST_CASE("level1") {
   /*
     <---+0+--->
     |    +    |
@@ -64,10 +64,10 @@ TEST_CASE("naive") {
 
   CHECK(dt.terms_dm == (std::unordered_set<int> {6,7,8}));
   
-  CHECK(dt.naive_alg()->cost == 1+1+2-1);
-  CHECK(dt.naive_alg()->cost_sc == 1+1+2);
+  CHECK(dt.level1_alg()->cost == 1+1+2-1);
+  CHECK(dt.level1_alg()->cost_sc == 1+1+2);
 
-  auto tree = dt.adaptive_naive_alg();
+  auto tree = dt.adaptive_level1_alg();
   CHECK(tree->cost == 1+1+2-1);
   CHECK(tree->cost_sc == 1+1+1);
 }

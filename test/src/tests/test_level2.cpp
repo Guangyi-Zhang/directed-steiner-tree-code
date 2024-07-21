@@ -13,7 +13,7 @@
 #include <tuple>
 
 
-TEST_CASE("level2_co_alg") {
+TEST_CASE("fast_level2_alg") {
   using namespace dst;
   /*
     <-----+0+----->
@@ -38,9 +38,9 @@ TEST_CASE("level2_co_alg") {
   std::vector<int> terms {11,12};
   DST dt = DST(edges, weights, root, terms);
 
-  CHECK(dt.naive_alg()->cost == 3);
-  CHECK(dt.naive_alg()->cost_sc == 4);
-  CHECK(dt.naive_alg()->debuginfo.at("sssp_nodes_visited") == "7"); // 5+2 dummies
+  CHECK(dt.level1_alg()->cost == 3);
+  CHECK(dt.level1_alg()->cost_sc == 4);
+  CHECK(dt.level1_alg()->debuginfo.at("sssp_nodes_visited") == "7"); // 5+2 dummies
 
   auto tree = dt.level2_alg();
 
@@ -48,11 +48,11 @@ TEST_CASE("level2_co_alg") {
   CHECK(dt.level2_alg()->cost_sc == 3);
   CHECK(dt.level2_alg()->debuginfo.at("sssp_nodes_visited") == "16"); // 7+(5+4)
 
-  CHECK(dt.level2_co_alg()->to_tree()->cost == 3);
-  CHECK(dt.level2_co_alg()->cost_sc == 3);
-  CHECK(dt.level2_co_alg()->debuginfo.at("sssp_nodes_visited") == "13"); // 7+2*(3)
+  CHECK(dt.fast_level2_alg()->to_tree()->cost == 3);
+  CHECK(dt.fast_level2_alg()->cost_sc == 3);
+  CHECK(dt.fast_level2_alg()->debuginfo.at("sssp_nodes_visited") == "13"); // 7+2*(3)
 
-  dt.level2_co_alg()->to_tree()->print();
+  dt.fast_level2_alg()->to_tree()->print();
 }
 
 
@@ -186,8 +186,8 @@ TEST_CASE("crossing") {
   std::vector<int> terms {21,22,23};
   DST dt = DST(edges, weights, 0, terms);
 
-  CHECK(dt.naive_alg()->cost == 4+4+2-1);
-  CHECK(dt.naive_alg()->cost_sc == 4+4+2);
+  CHECK(dt.level1_alg()->cost == 4+4+2-1);
+  CHECK(dt.level1_alg()->cost_sc == 4+4+2);
 
   // first pick 2->23, and then 1->{21,22}
   // no, now adaptively pick 2->23, then 2->22, then 1->21
@@ -214,8 +214,8 @@ TEST_CASE("cycles") {
   std::vector<int> terms {2,4};
   DST dt = DST(edges, weights, 0, terms);
 
-  CHECK(dt.naive_alg()->cost_sc == 2+4);
-  CHECK(dt.naive_alg()->cost == 2+2);
+  CHECK(dt.level1_alg()->cost_sc == 2+4);
+  CHECK(dt.level1_alg()->cost == 2+2);
   auto tree = dt.level2_alg();
   CHECK(tree->to_tree()->cost == 2+2);
   // CHECK(tree->cost_sc == 2+4); // pick 2 and then 4
@@ -241,15 +241,15 @@ TEST_CASE("level2_alg") {
   std::vector<int> terms {11,12,13};
   DST dt = DST(edges, weights, 0, terms);
 
-  CHECK(dt.naive_alg()->cost == 1*3 + 2*3);
-  CHECK(dt.naive_alg()->cost_sc == 1*3 + 2*3);
+  CHECK(dt.level1_alg()->cost == 1*3 + 2*3);
+  CHECK(dt.level1_alg()->cost_sc == 1*3 + 2*3);
 
   auto tree = dt.level2_alg();
   CHECK(tree->to_tree()->cost == 2.5 + 1*3);
   CHECK(tree->cost_sc == 2.5 + 1*3);
   CHECK((tree->terms == std::unordered_set<int> {14,15,16}));
 
-  tree = dt.level2_co_alg();
+  tree = dt.fast_level2_alg();
   CHECK(tree->to_tree()->cost == 2.5 + 1*3);
   CHECK(tree->cost_sc == 2.5 + 1*3);
   CHECK((tree->terms == std::unordered_set<int> {14,15,16}));

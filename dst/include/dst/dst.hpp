@@ -135,7 +135,7 @@ namespace dst {
     }
 
 
-    auto level2_rooted_at_r_co(
+    auto fast_level2_rooted_at_r(
         int r,
         const std::unordered_set<int> &V_cand, 
         const std::unordered_set<int> &terms_cand
@@ -263,8 +263,8 @@ namespace dst {
     }
 
 
-    auto level2_co_alg() {
-      return level2_rooted_at_r_co(root, V, terms_dm);
+    auto fast_level2_alg() {
+      return fast_level2_rooted_at_r(root, V, terms_dm);
     }
 
 
@@ -342,7 +342,7 @@ namespace dst {
     }
 
 
-    auto level3_alg(double alpha=1.0, int n_thresholds=10) {
+    auto fast_level3_alg(double alpha=1.0, int n_thresholds=10) {
       /*---------------
        | Pre-compute
        --------------*/
@@ -575,7 +575,7 @@ namespace dst {
     }
 
 
-    auto level3_alg_naive() {
+    auto level3_alg() {
       // pre-compute dijkstra
       // dijktra from the root
       auto [dists_r, trace_r] = dijkstra_from_root_and_cleanup(root);
@@ -671,7 +671,7 @@ namespace dst {
     }
 
 
-    auto adaptive_naive_alg() {
+    auto adaptive_level1_alg() {
 
       auto tree = std::make_shared<Tree> (root);
       int sssp_nodes_visited = 0;
@@ -716,7 +716,7 @@ namespace dst {
     }
 
 
-    auto naive_alg() {
+    auto level1_alg() {
       auto [dists, trace] = dijkstra(adj, w, root, false, terms_dm);
 
       // take the union of all paths from root to t's
