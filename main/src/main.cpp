@@ -1,5 +1,6 @@
 #include <cassert>
 #include <ctime>
+#include <cstdlib> // rand()
 #include <iostream>
 #include <fstream>
 #include <sstream>
@@ -45,6 +46,7 @@ auto main(int argc, char** argv) -> int {
     ("d,dataset", "dataset", cxxopts::value<std::string>()->default_value("random_graph_wFalse_p01_1000.csv"))
     ("v,version", "version", cxxopts::value<int>()->default_value("0"))
     ("r,rep", "rep", cxxopts::value<int>()->default_value("1"))
+    ("k,num_of_terminals", "terminals", cxxopts::value<int>()->default_value("10"))
     ("a,alpha", "alpha", cxxopts::value<double>()->default_value("0.99"))
     ("t,note", "note", cxxopts::value<std::string>()->default_value("none"))
   ;
@@ -57,8 +59,11 @@ auto main(int argc, char** argv) -> int {
   std::string dataset = opresult["dataset"].as<std::string>();
   std::string note = opresult["note"].as<std::string>();
   double alpha = opresult["alpha"].as<double>();
+  int k = opresult["num_of_terminals"].as<int>();
   int rep = opresult["rep"].as<int>();
   int version = opresult["version"].as<int>();
+  int seed = time(nullptr);
+  srand(seed);
 
   // load data
   std::vector<std::pair<int,int>> edges;
@@ -67,6 +72,8 @@ auto main(int argc, char** argv) -> int {
   std::ifstream file("datasets/" + dataset);
   
   std::string line;
+  int n = 0, m = 0;
+  std::unordered_set<int> V;
   if (file.is_open()) {
     if (dataset == "soc-Epinions1.txt") {
       while (std::getline(file, line)) {
@@ -80,6 +87,8 @@ auto main(int argc, char** argv) -> int {
 
         edges.push_back({v1,v2});
         weights.push_back(1);
+        V.insert(v1); V.insert(v2);
+        m++;
       }
     } else {
       while (std::getline(file, line)) {
@@ -96,8 +105,11 @@ auto main(int argc, char** argv) -> int {
 
         edges.push_back({v1,v2});
         weights.push_back(w);
+        V.insert(v1); V.insert(v2);
+        m++;
       }
     }
+    n = V.size();
 
     file.close();
   } else {
@@ -107,21 +119,18 @@ auto main(int argc, char** argv) -> int {
 
   int root {0};
   std::vector<int> terms;
-  if (dataset.compare("random_graph_10000.csv") == 0)
-    terms = {7270, 860, 5390, 5191, 5734, 6265, 466, 4426, 5578, 8322};
-  if (dataset.compare("random_graph_5000.csv") == 0)
-    terms = {860, 3772, 3092, 466, 4426, 3444, 3171, 2919, 130, 1685};
-  if (dataset.find("1000.csv") != std::string::npos)
-    terms = {102, 435, 860, 270, 106, 71, 700, 20, 614, 121};
-  if (dataset.compare("random_graph_100.csv") == 0)
-    terms = {51, 92, 14, 71, 60, 20, 82, 86, 74, 74};
-  if (dataset.compare("random_graph_500.csv") == 0)
-    terms = {102, 435, 348, 270, 106, 71, 188, 20, 102, 121};
-  if (dataset.compare("random_graph_250.csv") == 0)
-    terms = {102, 179, 92, 14, 106, 71, 188, 20, 102, 121};
-  if (dataset == "soc-Epinions1.txt")
-    terms = {7270, 860, 53900, 5191, 25734, 6265, 466, 4426, 65578, 8322};
+  std::unordered_set<int> terms_set;
+  std::cout << "RAND_MAX: " << RAND_MAX << std::endl; // same as INT_MAX 
+  for (int i=0; i<k; i++) {
+    // generate random terminals, [0, n)
+    int t = rand() % n;
+    while(has_key(terms_set, t))
+      t = rand() % n;
+    terms.push_back(t);
+    terms_set.insert(t);
+  }
   fmt::println("terms: {}", terms);
+
 
   /* START RUNNING */
   std::clock_t c_start = std::clock();
@@ -177,9 +186,13 @@ auto main(int argc, char** argv) -> int {
   d.SetObject();
   d.AddMember("version", rapidjson::Value(version), a); 
   d.AddMember("note", rapidjson::Value(rapidjson::StringRef(note.c_str())), a); 
-  d.AddMember("buildtype", rapidjson::Value(rapidjson::StringRef(opresult["buildtype"].as<std::string>().c_str())), a); 
+  d.AddMember("buildtype", rapidjson::Value(rapidjson::StringRef(buildtype.c_str())), a); 
   d.AddMember("method", rapidjson::Value(rapidjson::StringRef(method.c_str())), a); 
   d.AddMember("rep", rapidjson::Value(rep), a); 
+  d.AddMember("k", rapidjson::Value(k), a); 
+  d.AddMember("n", rapidjson::Value(n), a); 
+  d.AddMember("m", rapidjson::Value(m), a); 
+  d.AddMember("seed", rapidjson::Value(seed), a); 
   d.AddMember("dataset", rapidjson::Value(rapidjson::StringRef(dataset.c_str())), a); 
   d.AddMember("alpha", rapidjson::Value(alpha), a); 
   d.AddMember("cost", rapidjson::Value(tree->cost), a); 
@@ -189,6 +202,12 @@ auto main(int argc, char** argv) -> int {
   d.AddMember("runtime", rapidjson::Value(time_elapsed_ms), a); 
   d.AddMember("sssp_nodes_visited", rapidjson::Value(std::stoi(debuginfo->at("sssp_nodes_visited"))), a); 
   d.AddMember("mem", rapidjson::Value(rss), a); 
+
+  /* fail with invalid output in log, don't know why
+  std::stringstream ss_terms;
+  std::copy(terms.begin(), terms.end(), std::ostream_iterator<int>(ss_terms, ","));
+  d.AddMember("terms", rapidjson::Value(rapidjson::StringRef(ss_terms.str().c_str())), a); 
+  */
 
   rapidjson::StringBuffer buffer;
   rapidjson::Writer<rapidjson::StringBuffer> writer(buffer);
