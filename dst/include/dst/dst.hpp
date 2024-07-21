@@ -428,9 +428,9 @@ namespace dst {
         // ***** find the best 3-level partree *****
         for (auto u: V) {
           double d_ru = has_key(*covered, u)? 0 : dists_r->at(u);
-          if (leq(alpha * best->density(), best2->density() - dists_r->at(u))) {
+          if (leq(alpha * best->density(), best2->density() - d_ru)) {
             // it is fine to skip root=u, same as best2
-            // TODO: can't -d_ru for d_ru=0 by covered
+            // also fine to skip u in covered with d_ru=0 
             continue;
           }
 
@@ -446,7 +446,6 @@ namespace dst {
           while (terms_left_u.size() > 0) {
             niter_u++;
             std::shared_ptr<PartialTree> tree2_u = nullptr;
-            double d_uv_max = 0;
 
             // ***** process prior reached v's *****
             if (not Q_u->empty() and tree2_u_old == nullptr) { // restore Q_u at the i-th visit to u 
@@ -495,8 +494,7 @@ namespace dst {
                 continue;
 
               // try to early-terminate sssp
-              d_uv_max = std::max(d_uv, d_uv_max); 
-              double denlb = thrminden.min_density(d_uv_max);
+              double denlb = thrminden.min_density(d_uv);
               if (tree2_u != nullptr and leq(tree2_u->density(), denlb))
                 break;
               if (leq(alpha * best->density(), denlb)) {
@@ -630,8 +628,7 @@ namespace dst {
             double den_new = (tree_u->cost_sc + tree2_u->cost_sc) / 
               (terms_left.size() - terms_left_u.size() + tree2_u->terms.size());
             if (terms_left.size() > terms_left_u.size()) { // skip 1st iteration
-              double den_u = tree_u->cost_sc / (terms_left.size() - terms_left_u.size());
-              if (lq(den_u, den_new))
+              if (lq(tree_u->density(), den_new))
                 break;
             }
 
