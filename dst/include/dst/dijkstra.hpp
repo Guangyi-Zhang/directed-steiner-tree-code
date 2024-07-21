@@ -10,7 +10,7 @@
 #include <functional> // std::greater
 
 #include <boost/container_hash/hash.hpp>
-#include <dst/consts.hpp>
+#include "dst/consts.hpp"
 
 
 namespace dst {

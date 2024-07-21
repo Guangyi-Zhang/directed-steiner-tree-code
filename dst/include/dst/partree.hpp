@@ -7,8 +7,8 @@
 #include <set>
 #include <list>
 
-#include <dst/utils.hpp>
-#include <dst/tree.hpp>
+#include "dst/utils.hpp"
+#include "dst/tree.hpp"
 
 
 namespace dst {

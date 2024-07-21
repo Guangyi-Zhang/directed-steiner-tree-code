@@ -1,13 +1,3 @@
-#include <fmt/ranges.h>
-#include "rapidjson/document.h"
-#include "rapidjson/writer.h"
-#include "rapidjson/stringbuffer.h"
-#include "spdlog/spdlog.h"
-#include "spdlog/sinks/basic_file_sink.h"
-#include "dst/dst.hpp"
-#include "dst/nadeau.hpp"
-
-#include <cxxopts.hpp>
 #include <cassert>
 #include <ctime>
 #include <iostream>
@@ -20,6 +10,16 @@
 #include <unordered_map>
 #include <utility>
 #include <tuple>
+
+#include <cxxopts.hpp>
+#include <fmt/ranges.h>
+#include "rapidjson/document.h"
+#include "rapidjson/writer.h"
+#include "rapidjson/stringbuffer.h"
+#include "spdlog/spdlog.h"
+#include "spdlog/sinks/basic_file_sink.h"
+#include "dst/dst.hpp"
+#include "dst/nadeau.hpp"
 
 
 auto main(int argc, char** argv) -> int {

@@ -1,10 +1,3 @@
-#include <doctest/doctest.h>
-
-#include <fmt/ranges.h>
-#include "dst/dst.hpp"
-#include "dst/dijkstra.hpp"
-#include "dst/utils.hpp"
-
 #include <iostream>
 #include <string>
 #include <map>
@@ -13,6 +6,12 @@
 #include <unordered_map>
 #include <utility>
 #include <tuple>
+
+#include <doctest/doctest.h>
+#include <fmt/ranges.h>
+#include "dst/dst.hpp"
+#include "dst/dijkstra.hpp"
+#include "dst/utils.hpp"
 
 #include "tests/test_level2.cpp"
 #include "tests/test_level3.cpp"

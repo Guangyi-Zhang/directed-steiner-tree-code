@@ -1,8 +1,3 @@
-#include <fmt/ranges.h>
-#include "dst/dst.hpp"
-#include "dst/dijkstra.hpp"
-#include "dst/utils.hpp"
-
 #include <iostream>
 #include <string>
 #include <map>
@@ -11,6 +6,11 @@
 #include <unordered_map>
 #include <utility>
 #include <tuple>
+
+#include <fmt/ranges.h>
+#include "dst/dst.hpp"
+#include "dst/dijkstra.hpp"
+#include "dst/utils.hpp"
 
 
 TEST_CASE("fast_level2_alg") {

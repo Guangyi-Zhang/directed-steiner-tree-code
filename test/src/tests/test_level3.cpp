@@ -1,9 +1,3 @@
-#include <fmt/ranges.h>
-#include "dst/dst.hpp"
-#include "dst/dijkstra.hpp"
-#include "dst/utils.hpp"
-#include "dst/partree.hpp"
-
 #include <iostream>
 #include <string>
 #include <map>
@@ -12,6 +6,12 @@
 #include <unordered_map>
 #include <utility>
 #include <tuple>
+
+#include <fmt/ranges.h>
+#include "dst/dst.hpp"
+#include "dst/dijkstra.hpp"
+#include "dst/utils.hpp"
+#include "dst/partree.hpp"
 
 
 TEST_CASE("minden_by_thresholds") {
