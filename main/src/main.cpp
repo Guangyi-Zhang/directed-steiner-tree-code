@@ -70,13 +70,16 @@ auto main(int argc, char** argv) -> int {
   int n = 0, m = 0;
   std::unordered_set<int> V;
   if (file.is_open()) {
-    if (dataset == "soc-Epinions1.txt") {
+    if (dataset == "soc-Epinions1.txt" or 
+        dataset == "web-Google.txt" or
+        dataset == "soc-pokec-relationships.txt"
+       ) 
+    {
       while (std::getline(file, line)) {
         if (line[0] == '#')
           continue;
 
         std::istringstream iss {line};
-        std::string value;
         int v1, v2;
         iss >> v1 >> v2;
 
@@ -85,7 +88,49 @@ auto main(int argc, char** argv) -> int {
         V.insert(v1); V.insert(v2);
         m++;
       }
-    } else {
+    } 
+    else if (dataset == "SFRoad") {
+      while (std::getline(file, line)) {
+        std::istringstream iss {line};
+        int edgeid, v1, v2;
+        double w;
+        iss >> edgeid >> v1 >> v2 >> w;
+
+        edges.push_back({v1,v2});
+        weights.push_back(w);
+        V.insert(v1); V.insert(v2);
+        m++;
+      }
+    }
+    else if (dataset == "token_transfers.csv") {
+      std::getline(file, line); // skip 1st line
+      while (std::getline(file, line)) {
+        std::stringstream ss(line);
+        std::string value;
+        std::unordered_map<std::string,int> addr2id;
+
+        std::getline(ss, value, ','); // block_number
+        std::getline(ss, value, ','); // transaction_index
+        std::getline(ss, value, ','); // from_address
+        if (not has_key(addr2id, value))
+            addr2id[value] = addr2id.size();
+        int v1 = addr2id.at(value);
+        std::getline(ss, value, ','); // to_address
+        if (not has_key(addr2id, value))
+            addr2id[value] = addr2id.size();
+        int v2 = addr2id.at(value);
+        std::getline(ss, value, ','); // time_stamp
+        std::getline(ss, value, ','); // contract_address
+        std::getline(ss, value, ','); // value
+        double w = std::stod(value);
+
+        edges.push_back({v1,v2});
+        weights.push_back(w);
+        V.insert(v1); V.insert(v2);
+        m++;
+      }
+    }
+    else {
       while (std::getline(file, line)) {
         // split the line into individual values
         std::stringstream ss(line);
