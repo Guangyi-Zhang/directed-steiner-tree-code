@@ -64,7 +64,7 @@ namespace dst {
       v_max = init_graph(edges, edgeweights, &unreachables);
 
       for (auto t: terminals) {
-        if (has_key(unreachables, t))
+        if (has_key(unreachables, t) or not has_key(V, t))
           continue;
         terms.push_back(t);
       }
