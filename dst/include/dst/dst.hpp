@@ -155,13 +155,9 @@ namespace dst {
     }
 
 
-    auto fast_level2_rooted_at_r(
-        int r,
-        const std::unordered_set<int> &V_cand, 
-        const std::unordered_set<int> &terms_cand
-    ) {
+    auto fast_level2_alg() {
       // dijktra from the root
-      auto [dists_r, trace_r] = dijkstra(adj, w, r);
+      auto [dists_r, trace_r] = dijkstra(adj, w, root);
 
       // init a PartialTree for each v
       std::unordered_map<int, std::shared_ptr<PartialTree>> trees;
@@ -169,13 +165,13 @@ namespace dst {
         return a->density() < b->density(); 
       };
       std::set<std::shared_ptr<PartialTree>, decltype(cmp_level2)> LBs(cmp_level2); // a set as balanced binary-tree to sort LBs
-      for (auto v: V_cand) {
-        trees[v] = std::make_shared<PartialTree> (r, v, dists_r->at(v));
+      for (auto v: V) {
+        trees[v] = std::make_shared<PartialTree> (root, v, dists_r->at(v));
         LBs.insert(trees.at(v));
       }
 
-      CoordinatedDijkstra cosssp {adj_r, w, terms_cand, true}; // dijktra from each terminal
-      auto par = std::make_shared<PartialTreeManager> (r);
+      CoordinatedDijkstra cosssp {adj_r, w, terms_dm, true}; // dijktra from each terminal
+      auto par = std::make_shared<PartialTreeManager> (root);
       par->trace_r = trace_r;
       par->trace_t = cosssp.trace_t;
       int v_best {NONVERTEX};
@@ -191,7 +187,7 @@ namespace dst {
         }
         auto covered_by_best = par->append(best, true);
         double denbest_next = std::numeric_limits<double>::max();
-        for (auto v: V_cand) {
+        for (auto v: V) {
           auto tree_v = trees.at(v);
           tree_v->erase_and_reset(best->terms);
           if (has_key(*covered_by_best, tree_v->v) and not has_key(*covered, tree_v->v)) // newly covered
@@ -207,7 +203,7 @@ namespace dst {
       };
 
       // iteratively add 2-level greedy partial trees
-      while (terms_cand.size() > par->terms.size()) {
+      while (terms_dm.size() > par->terms.size()) {
         auto [t, v, d_vt] = cosssp.next();
         if (t == NONVERTEX) { // run out of next()
           for (auto &p: trees) {
@@ -225,7 +221,7 @@ namespace dst {
           continue;
         }
 
-        if (has_key(terms_cand, v))
+        if (has_key(terms_dm, v))
           continue;
         auto tree_v = trees.at(v);
         tree_v->add_term(t, d_vt);
@@ -248,7 +244,7 @@ namespace dst {
         auto tree_best = trees.at(v_best);
 
         // update LB and compare with UB
-        if (leq(tree_best->density(), tree_v->density_LB(terms_cand.size() - par->terms.size())))
+        if (leq(tree_best->density(), tree_v->density_LB(terms_dm.size() - par->terms.size())))
           LBs.erase(tree_v);
         else {
           LBs.erase(tree_v);
@@ -261,7 +257,7 @@ namespace dst {
 
         // found a greedy partial tree
         if (not tree_best->is_ready(d_vt) and  // until full construction
-            tree_best->terms.size() < (terms_cand.size() - par->terms.size()))
+            tree_best->terms.size() < (terms_dm.size() - par->terms.size()))
           // 1. wait for full construction
           // 2. v_best has reached all remaining terminals
           // 3. some terminals are not reachable
@@ -281,11 +277,6 @@ namespace dst {
       par->trace_r = trace_r;
       par->trace_t = cosssp.trace_t;
       return par;
-    }
-
-
-    auto fast_level2_alg() {
-      return fast_level2_rooted_at_r(root, V, terms_dm);
     }
 
 
