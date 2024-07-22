@@ -39,7 +39,7 @@ auto main(int argc, char** argv) -> int {
     ("r,rep", "rep", cxxopts::value<int>()->default_value("1"))
     ("s,seed", "seed", cxxopts::value<int>()->default_value("-1"))
     ("k,num_of_terminals", "terminals", cxxopts::value<int>()->default_value("10"))
-    ("a,alpha", "alpha", cxxopts::value<double>()->default_value("0.99"))
+    ("a,alpha", "alpha", cxxopts::value<double>()->default_value("1"))
     ("t,note", "note", cxxopts::value<std::string>()->default_value("none"))
   ;
   auto opresult = options.parse(argc, argv);
@@ -58,6 +58,7 @@ auto main(int argc, char** argv) -> int {
   if (seed == -1)
     seed = time(nullptr);
   srand(seed);
+  spdlog::info("running method={}, dataset={}, ver={}, rep={}", method, dataset, version, rep);
 
   // load data
   std::vector<std::pair<int,int>> edges;
