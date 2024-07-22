@@ -42,10 +42,11 @@ auto main(int argc, char** argv) -> int {
   options.add_options()
     ("h,help", "Show help")
     ("b,buildtype", "CMAKE_BUILD_TYPE", cxxopts::value<std::string>()->default_value("unknown"))
-    ("m,method", "method", cxxopts::value<std::string>()->default_value("naive"))
-    ("d,dataset", "dataset", cxxopts::value<std::string>()->default_value("random_graph_wFalse_p01_1000.csv"))
+    ("m,method", "method", cxxopts::value<std::string>()->default_value("level1"))
+    ("d,dataset", "dataset", cxxopts::value<std::string>()->default_value("none"))
     ("v,version", "version", cxxopts::value<int>()->default_value("0"))
     ("r,rep", "rep", cxxopts::value<int>()->default_value("1"))
+    ("s,seed", "seed", cxxopts::value<int>()->default_value("-1"))
     ("k,num_of_terminals", "terminals", cxxopts::value<int>()->default_value("10"))
     ("a,alpha", "alpha", cxxopts::value<double>()->default_value("0.99"))
     ("t,note", "note", cxxopts::value<std::string>()->default_value("none"))
@@ -62,7 +63,9 @@ auto main(int argc, char** argv) -> int {
   int k = opresult["num_of_terminals"].as<int>();
   int rep = opresult["rep"].as<int>();
   int version = opresult["version"].as<int>();
-  int seed = time(nullptr);
+  int seed = opresult["seed"].as<int>();
+  if (seed == -1)
+    seed = time(nullptr);
   srand(seed);
 
   // load data
@@ -144,7 +147,7 @@ auto main(int argc, char** argv) -> int {
     tree = dt.level1_alg();
     debuginfo = &(tree->debuginfo);
   }
-  else if (method.compare("adpnaive_level1") == 0) {
+  else if (method.compare("adaptive_level1") == 0) {
     tree = dt.adaptive_level1_alg();
     debuginfo = &(tree->debuginfo);
   }
