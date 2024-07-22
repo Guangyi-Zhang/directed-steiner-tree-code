@@ -15,6 +15,7 @@
 #include <unordered_set>
 #include <unordered_map>
 #include <tuple>
+#include <iostream>
 
 #include <fmt/ranges.h>
 #include <boost/container_hash/hash.hpp>
@@ -40,22 +41,32 @@ namespace dst {
     std::unordered_map<int, std::vector<int>> adj_r; // reverse adj
     std::unordered_set<int> V; // excluding dummy terminals
 
-    DST(  std::vector<std::pair<int,int>> edges, 
-          std::vector<double> edgeweights, 
-          int root, 
-          std::vector<int> terms) :
-        root {root},
-        terms {terms}
+    int narcs; // for testing
+
+    DST(  const std::vector<std::pair<int,int>> &edges, 
+          const std::vector<double> &edgeweights, 
+          const int root, 
+          const std::vector<int> &terminals) :
+        root {root}
     {
-      int v_max = 0;
-      for (size_t i = 0; i < edges.size(); i++) {
-          auto p = edges[i];
-          adj[p.first].push_back(p.second);
-          adj_r[p.second].push_back(p.first);
-          w[{p.first, p.second}] = edgeweights[i];
-          V.insert(p.first);
-          V.insert(p.second);
-          v_max = std::max({p.first, p.second, v_max});
+      int v_max = init_graph(edges, edgeweights);
+
+      // collect unreachble vertices
+      auto [dists_r, trace_r] = dijkstra(adj, w, root);
+
+      std::unordered_set<int> unreachables;
+      for (auto u: V) {
+        if (not has_key(*dists_r, u))
+          unreachables.insert(u);
+      }
+
+      // re-initialize after proprecessing
+      v_max = init_graph(edges, edgeweights, &unreachables);
+
+      for (auto t: terminals) {
+        if (has_key(unreachables, t))
+          continue;
+        terms.push_back(t);
       }
 
       // create dummy terminals
@@ -75,27 +86,36 @@ namespace dst {
     }
 
 
-    auto dijkstra_from_root_and_cleanup(int root) {
-      // remove unreachble vertices and terminals
-      auto [dists_r, trace_r] = dijkstra(adj, w, root);
+    int init_graph(const std::vector<std::pair<int,int>> &edges, 
+                   const std::vector<double> &edgeweights,
+                   const std::unordered_set<int> *unreachables=nullptr) 
+    {
+      V.clear();
+      adj.clear();
+      adj_r.clear();
+      w.clear();
+      narcs = 0;
 
-      std::vector<int> unreachables;
-      for (auto u: V) {
-        if (not has_key(*dists_r, u))
-          unreachables.push_back(u);
+      int v_max = 0;
+      for (size_t i = 0; i < edges.size(); i++) {
+          auto p = edges[i];
+
+          // drop unreachable arcs
+          if (unreachables != nullptr) {
+            if (has_key(*unreachables, p.first) or has_key(*unreachables, p.second))
+              continue;
+          }
+
+          narcs++;
+          adj[p.first].push_back(p.second);
+          adj_r[p.second].push_back(p.first);
+          w[{p.first, p.second}] = edgeweights[i];
+          V.insert(p.first);
+          V.insert(p.second);
+          v_max = std::max({p.first, p.second, v_max});
       }
-      for (auto u: unreachables)
-        V.erase(u);
 
-      unreachables.clear();
-      for (auto t: terms_dm) {
-        if (not has_key(*dists_r, t))
-          unreachables.push_back(t);
-      }
-      for (auto t: unreachables)
-        terms_dm.erase(t);
-
-      return std::make_tuple(dists_r, trace_r);
+      return v_max;
     }
 
 
@@ -141,7 +161,7 @@ namespace dst {
         const std::unordered_set<int> &terms_cand
     ) {
       // dijktra from the root
-      auto [dists_r, trace_r] = dijkstra_from_root_and_cleanup(r);
+      auto [dists_r, trace_r] = dijkstra(adj, w, r);
 
       // init a PartialTree for each v
       std::unordered_map<int, std::shared_ptr<PartialTree>> trees;
@@ -204,6 +224,7 @@ namespace dst {
           add_greedy(tree_best);
           continue;
         }
+
         if (has_key(terms_cand, v))
           continue;
         auto tree_v = trees.at(v);
@@ -279,7 +300,7 @@ namespace dst {
     ) {
       // dijktra from the root
       if (dists_r == nullptr)
-        std::tie(dists_r, trace_r) = dijkstra_from_root_and_cleanup(r);
+        std::tie(dists_r, trace_r) = dijkstra(adj, w, r);
 
       // dijktra from each terminal
       if (dists_t == nullptr) {
@@ -348,7 +369,7 @@ namespace dst {
        --------------*/
       // pre-compute dijkstra
       // dijktra from the root
-      auto [dists_r, trace_r] = dijkstra_from_root_and_cleanup(root);
+      auto [dists_r, trace_r] = dijkstra(adj, w, root);
       // dijkstra from each u
       std::unordered_map<int, Dijkstra> sssp_u;
       for (auto u: V) {
@@ -578,7 +599,7 @@ namespace dst {
     auto level3_alg() {
       // pre-compute dijkstra
       // dijktra from the root
-      auto [dists_r, trace_r] = dijkstra_from_root_and_cleanup(root);
+      auto [dists_r, trace_r] = dijkstra(adj, w, root);
       // dijkstra from each u
       auto trace_u = std::make_shared<std::unordered_map<int, std::shared_ptr<std::unordered_map<int,int>>>>();
       auto dists_u = std::make_shared<std::unordered_map<int, std::shared_ptr<std::unordered_map<int,double>>>>();
