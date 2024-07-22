@@ -58,7 +58,7 @@ auto main(int argc, char** argv) -> int {
   if (seed == -1)
     seed = time(nullptr);
   srand(seed);
-  spdlog::info("running method={}, dataset={}, ver={}, rep={}", method, dataset, version, rep);
+  spdlog::info("running method={}, dataset={}, ver={}, rep={}, seed={}", method, dataset, version, rep, seed);
 
   // load data
   std::vector<std::pair<int,int>> edges;
@@ -68,13 +68,14 @@ auto main(int argc, char** argv) -> int {
   
   std::string line;
   int n = 0, m = 0;
-  std::unordered_set<int> V;
+  std::unordered_set<int> V; // vertex id in [0, V.size())
   if (file.is_open()) {
     if (dataset == "soc-Epinions1.txt" or 
         dataset == "web-Google.txt" or
         dataset == "soc-pokec-relationships.txt"
        ) 
     {
+      std::unordered_map<int,int> id2v;
       while (std::getline(file, line)) {
         if (line[0] == '#')
           continue;
@@ -83,6 +84,13 @@ auto main(int argc, char** argv) -> int {
         int v1, v2;
         iss >> v1 >> v2;
 
+        if (not has_key(id2v, v1))
+            id2v[v1] = id2v.size();
+        v1 = id2v.at(v1);
+        if (not has_key(id2v, v2))
+            id2v[v2] = id2v.size();
+        v2 = id2v.at(v2);
+
         edges.push_back({v1,v2});
         weights.push_back(1);
         V.insert(v1); V.insert(v2);
@@ -90,11 +98,19 @@ auto main(int argc, char** argv) -> int {
       }
     } 
     else if (dataset == "SFRoad") {
+      std::unordered_map<int,int> id2v;
       while (std::getline(file, line)) {
         std::istringstream iss {line};
         int edgeid, v1, v2;
         double w;
         iss >> edgeid >> v1 >> v2 >> w;
+
+        if (not has_key(id2v, v1))
+            id2v[v1] = id2v.size();
+        v1 = id2v.at(v1);
+        if (not has_key(id2v, v2))
+            id2v[v2] = id2v.size();
+        v2 = id2v.at(v2);
 
         edges.push_back({v1,v2});
         weights.push_back(w);
@@ -103,22 +119,22 @@ auto main(int argc, char** argv) -> int {
       }
     }
     else if (dataset == "token_transfers.csv") {
+      std::unordered_map<std::string,int> addr2v;
       std::getline(file, line); // skip 1st line
       while (std::getline(file, line)) {
         std::stringstream ss(line);
         std::string value;
-        std::unordered_map<std::string,int> addr2id;
 
         std::getline(ss, value, ','); // block_number
         std::getline(ss, value, ','); // transaction_index
         std::getline(ss, value, ','); // from_address
-        if (not has_key(addr2id, value))
-            addr2id[value] = addr2id.size();
-        int v1 = addr2id.at(value);
+        if (not has_key(addr2v, value))
+            addr2v[value] = addr2v.size();
+        int v1 = addr2v.at(value);
         std::getline(ss, value, ','); // to_address
-        if (not has_key(addr2id, value))
-            addr2id[value] = addr2id.size();
-        int v2 = addr2id.at(value);
+        if (not has_key(addr2v, value))
+            addr2v[value] = addr2v.size();
+        int v2 = addr2v.at(value);
         std::getline(ss, value, ','); // time_stamp
         std::getline(ss, value, ','); // contract_address
         std::getline(ss, value, ','); // value
@@ -130,7 +146,7 @@ auto main(int argc, char** argv) -> int {
         m++;
       }
     }
-    else {
+    else { // synthetic random data
       while (std::getline(file, line)) {
         // split the line into individual values
         std::stringstream ss(line);
@@ -153,7 +169,7 @@ auto main(int argc, char** argv) -> int {
 
     file.close();
   } else {
-    std::cerr << "Unable to open file" << std::endl;
+    spdlog::error("Error: unable to open file");
     return 1;
   }
 
