@@ -85,10 +85,10 @@ auto main(int argc, char** argv) -> int {
         iss >> v1 >> v2;
 
         if (not has_key(id2v, v1))
-            id2v[v1] = id2v.size();
+          id2v[v1] = id2v.size();
         v1 = id2v.at(v1);
         if (not has_key(id2v, v2))
-            id2v[v2] = id2v.size();
+          id2v[v2] = id2v.size();
         v2 = id2v.at(v2);
 
         edges.push_back({v1,v2});
@@ -106,10 +106,10 @@ auto main(int argc, char** argv) -> int {
         iss >> edgeid >> v1 >> v2 >> w;
 
         if (not has_key(id2v, v1))
-            id2v[v1] = id2v.size();
+          id2v[v1] = id2v.size();
         v1 = id2v.at(v1);
         if (not has_key(id2v, v2))
-            id2v[v2] = id2v.size();
+          id2v[v2] = id2v.size();
         v2 = id2v.at(v2);
 
         edges.push_back({v1,v2});
@@ -129,11 +129,11 @@ auto main(int argc, char** argv) -> int {
         std::getline(ss, value, ','); // transaction_index
         std::getline(ss, value, ','); // from_address
         if (not has_key(addr2v, value))
-            addr2v[value] = addr2v.size();
+          addr2v[value] = addr2v.size();
         int v1 = addr2v.at(value);
         std::getline(ss, value, ','); // to_address
         if (not has_key(addr2v, value))
-            addr2v[value] = addr2v.size();
+          addr2v[value] = addr2v.size();
         int v2 = addr2v.at(value);
         std::getline(ss, value, ','); // time_stamp
         std::getline(ss, value, ','); // contract_address
@@ -173,7 +173,7 @@ auto main(int argc, char** argv) -> int {
     return 1;
   }
 
-  int root {0};
+  int root = rand() % n;
   std::vector<int> terms;
   std::unordered_set<int> terms_set;
   spdlog::info("RAND_MAX: {}", RAND_MAX); // same as INT_MAX 
@@ -185,7 +185,7 @@ auto main(int argc, char** argv) -> int {
     terms.push_back(t);
     terms_set.insert(t);
   }
-  spdlog::info("terms: {}", terms);
+  spdlog::info("root={}, terms= {}", root, terms);
 
 
   /* START RUNNING */
