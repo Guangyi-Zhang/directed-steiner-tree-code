@@ -27,15 +27,6 @@ auto main(int argc, char** argv) -> int {
 
   using namespace dst;
 
-  // setup logger
-  try {
-    auto logger = spdlog::basic_logger_mt("basic_logger", "logs/basic-log.txt");
-    spdlog::set_default_logger(logger);
-  }
-  catch (const spdlog::spdlog_ex &ex) {
-    std::cout << "Log init failed: " << ex.what() << std::endl;
-  }
-
   // read parameters
   cxxopts::Options options(*argv, "DST");
 
@@ -123,7 +114,7 @@ auto main(int argc, char** argv) -> int {
   int root {0};
   std::vector<int> terms;
   std::unordered_set<int> terms_set;
-  std::cout << "RAND_MAX: " << RAND_MAX << std::endl; // same as INT_MAX 
+  spdlog::info("RAND_MAX: {}", RAND_MAX); // same as INT_MAX 
   for (int i=0; i<k; i++) {
     // generate random terminals, [0, n)
     int t = rand() % n;
@@ -132,7 +123,7 @@ auto main(int argc, char** argv) -> int {
     terms.push_back(t);
     terms_set.insert(t);
   }
-  fmt::println("terms: {}", terms);
+  spdlog::info("terms: {}", terms);
 
 
   /* START RUNNING */
@@ -220,7 +211,16 @@ auto main(int argc, char** argv) -> int {
   rapidjson::StringBuffer buffer;
   rapidjson::Writer<rapidjson::StringBuffer> writer(buffer);
   d.Accept(writer);
-  spdlog::info("{}", buffer.GetString());
+
+  // setup logger
+  try {
+    auto logger = spdlog::basic_logger_mt("basic_logger", "logs/basic-log.txt");
+    spdlog::set_default_logger(logger);
+  }
+  catch (const spdlog::spdlog_ex &ex) {
+    spdlog::error("Log init failed: {}", ex.what());
+  }
+  spdlog::info("{}", buffer.GetString()); // re-directed to file
 
   tree->print();
 
