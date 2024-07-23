@@ -45,8 +45,6 @@ namespace dst {
 
     std::unordered_map<int, double> distances_t;
     std::list<int> terms_after_ready, terms_before_ready;
-    double distance_lastly_added = 0;
-    double density_ = -1; // fake density
     bool ready = false; 
 
     PartialTree() {};
@@ -55,10 +53,6 @@ namespace dst {
         v {v}, d_rv {d_rv} {
       root = r;
       cost_sc = d_rv;
-    }
-
-    PartialTree(double density) : density_ {density} {
-      ; // construct a fake tree with a specific density
     }
 
     void add_term(int t, double d_vt) {
@@ -71,7 +65,6 @@ namespace dst {
         terms.insert(t);
         terms_before_ready.push_back(t);
         cost_sc += d_vt;
-        distance_lastly_added = d_vt;
       }
     }
 
@@ -92,7 +85,6 @@ namespace dst {
 
       // reset
       ready = false;
-      distance_lastly_added = 0;
       while (not ready) {
         if (terms_after_ready.empty())
           break;
@@ -120,7 +112,6 @@ namespace dst {
       terms.clear();
       terms_before_ready.clear();
       terms_after_ready.clear();
-      distance_lastly_added = 0;
 
       // re-add items in order
       // no need to iterate t's in terms_after_ready
@@ -138,21 +129,11 @@ namespace dst {
       terms_after_ready.splice(terms_after_ready.end(), terms_after_ready_cp);
     }
 
-    double density_LB(int k) {
-      if (terms.size() == 0)
-        return -1;
-
+    double density_LB(int k, double d_vt_lb=0) {
       if (ready)
         return density();
       else
-        return (cost_sc + (k-terms.size()) * distance_lastly_added) / k;
-    }
-
-    double density() {
-      if (density_ > 0) 
-        return density_;
-
-      return BasePartialTree::density();
+        return (cost_sc + (k-terms.size()) * d_vt_lb) / k;
     }
 
     bool is_ready(double d_LB=-1) {

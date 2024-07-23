@@ -41,7 +41,9 @@ namespace dst {
     std::unordered_map<int, std::vector<int>> adj_r; // reverse adj
     std::unordered_set<int> V; // excluding dummy terminals
 
-    int narcs; // for testing
+    // for testing
+    int narcs; 
+    std::string strtest = "";
 
     DST(  const std::vector<std::pair<int,int>> &edges, 
           const std::vector<double> &edgeweights, 
@@ -161,13 +163,10 @@ namespace dst {
 
       // init a PartialTree for each v
       std::unordered_map<int, std::shared_ptr<PartialTree>> trees;
-      auto cmp_level2 = [](std::shared_ptr<PartialTree> a, std::shared_ptr<PartialTree> b) { 
-        return a->density() < b->density(); 
-      };
-      std::set<std::shared_ptr<PartialTree>, decltype(cmp_level2)> LBs(cmp_level2); // a set as balanced binary-tree to sort LBs
+      std::list<std::shared_ptr<PartialTree>> LBs;
       for (auto v: V) {
         trees[v] = std::make_shared<PartialTree> (root, v, dists_r->at(v));
-        LBs.insert(trees.at(v));
+        LBs.push_back(trees.at(v));
       }
 
       CoordinatedDijkstra cosssp {adj_r, w, terms_dm, true}; // dijktra from each terminal
@@ -177,7 +176,9 @@ namespace dst {
       int v_best {NONVERTEX};
       auto covered = std::make_shared<std::unordered_set<int>>();
 
-      // define what to do after finding a greedy partial tree
+      /*----------------------------------------------
+       | define what to do after finding a greedy partial tree
+       ----------------------------------------------*/
       auto add_greedy = [&] (std::shared_ptr<PartialTree> best_) {
         auto best = std::make_shared<PartialTree>();
         *best = *best_; // copy
@@ -187,7 +188,10 @@ namespace dst {
         }
         auto covered_by_best = par->append(best, true);
         double denbest_next = std::numeric_limits<double>::max();
-        for (auto v: V) {
+
+        // update trees and LBs
+        LBs.clear();
+        for (auto v: V) { 
           auto tree_v = trees.at(v);
           tree_v->erase_and_reset(best->terms);
           if (has_key(*covered_by_best, tree_v->v) and not has_key(*covered, tree_v->v)) // newly covered
@@ -196,17 +200,23 @@ namespace dst {
             denbest_next = tree_v->density();
             v_best = v;
           }
-          LBs.insert(tree_v);
+          LBs.push_back(tree_v);
         }
+
         for (auto v: *covered_by_best)
           covered->insert(v);
       };
 
-      // iteratively add 2-level greedy partial trees
+      /*----------------------------------------------
+       | iteratively add 2-level greedy partial trees
+       ----------------------------------------------*/
       while (terms_dm.size() > par->terms.size()) {
         auto [t, v, d_vt] = cosssp.next();
-        if (t == NONVERTEX) { // run out of next()
-          for (auto &p: trees) {
+        //fmt::println("t={}, v={}, d_vt={}", t, v, d_vt);
+
+        // run out of next()
+        if (t == NONVERTEX) { 
+          for (auto &p: trees) { // find best among trees
             auto tr = p.second;
             if (v_best == NONVERTEX or 
                 lq(tr->density(), trees.at(v_best)->density()) or
@@ -234,25 +244,21 @@ namespace dst {
            (eq(tree_v->density(), tree_best_old->density()) and // break ties
             tree_v->terms.size() > tree_best_old->terms.size())) {
           v_best = v;
-
-          // remove all LBs larger than den_v
-          auto tmp = std::make_shared<PartialTree> (tree_v->density()); // a fake tree
-          for (auto it = LBs.upper_bound(tmp); it != LBs.end(); ) {
-            it = LBs.erase(it); // point to the next item
-          }
         }
         auto tree_best = trees.at(v_best);
+        if (DEBUG) fmt::println("best partree so far v={}, cost_sc={}, terms={}, LB={}", v_best, tree_best->cost_sc, tree_best->terms, LBs.front()->density_LB(terms_dm.size() - par->terms.size(), d_vt));
 
-        // update LB and compare with UB
-        if (leq(tree_best->density(), tree_v->density_LB(terms_dm.size() - par->terms.size())))
-          LBs.erase(tree_v);
-        else {
-          LBs.erase(tree_v);
-          LBs.insert(tree_v);
+        // compare UB with LBs, remove as many LBs as possible
+        while (LBs.front()->ready or 
+               leq(tree_best->density(), LBs.front()->density_LB(terms_dm.size() - par->terms.size(), d_vt))
+        ) {
+          if (DEBUG) fmt::println("prune v={}, density={}, terms={}", LBs.front()->v, LBs.front()->density(), LBs.front()->terms);
+          if (DEBUG_fast_level2) strtest += std::to_string(LBs.front()->v) + ":" + std::to_string(LBs.front()->density_LB(terms_dm.size() - par->terms.size(), d_vt)) + ",";
+          LBs.pop_front();
+          if (LBs.empty()) break;
         }
-        if (LBs.size() >= 2)
-          continue;
-        if (LBs.size() == 1 and (*LBs.begin())->v != v_best)
+        if (LBs.size() >= 2 or
+            (LBs.size() == 1 and LBs.front()->v != v_best))
           continue;
 
         // found a greedy partial tree
@@ -266,6 +272,7 @@ namespace dst {
           continue;
         if (tree_best->terms.size() == 0) // the rest terminals not reachable
           break;
+        if (DEBUG_fast_level2) strtest += "greedy_by_pruning";
         add_greedy(tree_best);
       }
 

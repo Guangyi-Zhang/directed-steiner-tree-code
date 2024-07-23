@@ -13,7 +13,7 @@
 #include "dst/utils.hpp"
 
 
-TEST_CASE("fast_level2_alg") {
+TEST_CASE("sssp_nodes_visited") {
   using namespace dst;
   /*
     <-----+0+----->
@@ -40,19 +40,20 @@ TEST_CASE("fast_level2_alg") {
 
   CHECK(dt.level1_alg()->cost == 3);
   CHECK(dt.level1_alg()->cost_sc == 4);
-  CHECK(dt.level1_alg()->debuginfo.at("sssp_nodes_visited") == "7"); // 5+2 dummies
+  CHECK(dt.level1_alg()->debuginfo.at("sssp_nodes_visited") == "7"); // 5+2=7 dummies
 
   auto tree = dt.level2_alg();
 
   CHECK(dt.level2_alg()->to_tree()->cost == 3);
   CHECK(dt.level2_alg()->cost_sc == 3);
-  CHECK(dt.level2_alg()->debuginfo.at("sssp_nodes_visited") == "16"); // 7+(5+4)
+  CHECK(dt.level2_alg()->debuginfo.at("sssp_nodes_visited") == "16"); // 7+(5 for t11 + 4 for t12)
 
-  CHECK(dt.fast_level2_alg()->to_tree()->cost == 3);
-  CHECK(dt.fast_level2_alg()->cost_sc == 3);
-  CHECK(dt.fast_level2_alg()->debuginfo.at("sssp_nodes_visited") == "13"); // 7+2*(3)
+  auto fast2 = dt.fast_level2_alg();
+  CHECK(fast2->to_tree()->cost == 3);
+  CHECK(fast2->cost_sc == 3);
+  CHECK(fast2->debuginfo.at("sssp_nodes_visited") == "14"); // 7+4+3
 
-  dt.fast_level2_alg()->to_tree()->print();
+  fast2->to_tree()->print();
 }
 
 
@@ -95,24 +96,24 @@ TEST_CASE("PartialTree2") {
   PartialTree tree {root, v, d_rv};
   CHECK(not tree.is_ready());
   CHECK(tree.density() > 1e8);
-  CHECK(tree.density_LB(k) < 0);
+  CHECK(eq(tree.density_LB(k), d_rv/k));
 
   tree.add_term(11, 1); // density = 2/1
-  CHECK(eq(tree.density_LB(k), (1.0+k)/k));
+  CHECK(eq(tree.density_LB(k,1), (1.0+k)/k));
   tree.add_term(12, 2); // density = 4/2
   CHECK(not tree.is_ready());
-  CHECK(eq(tree.density_LB(k), (1.0+1+(k-1)*2)/k));
+  CHECK(eq(tree.density_LB(k,2), (1.0+1+(k-1)*2)/k));
   tree.add_term(13, 4); // density = 8/3
   CHECK(tree.is_ready());
   CHECK(eq(tree.density(), 2));
-  CHECK(eq(tree.density_LB(k), tree.density()));
+  CHECK(eq(tree.density_LB(k,4), tree.density()));
   CHECK(tree.terms.size() == 2);
   CHECK(tree.terms_after_ready.size() == 1);
 
   tree.erase_and_reset({11}); // density = (1+2)/1
   CHECK(tree.is_ready());
   CHECK(eq(tree.density(), 3));
-  CHECK(eq(tree.density_LB(k), tree.density()));
+  CHECK(eq(tree.density_LB(k,4), tree.density()));
   CHECK(tree.terms.size() == 1);
   CHECK(tree.terms_after_ready.size() == 1); 
   CHECK(tree.terms_after_ready == std::list<int> {13}); 
@@ -128,35 +129,32 @@ TEST_CASE("PartialTree") {
   PartialTree tree {root, v, d_rv};
   CHECK(not tree.is_ready());
   CHECK(tree.density() > 1e8);
-  CHECK(tree.density_LB(k) < 0);
+  CHECK(eq(tree.density_LB(k), d_rv/k));
 
   tree.add_term(11, 1); // density = 2/1
-  CHECK(eq(tree.density_LB(k), (1.0+k)/k));
+  CHECK(eq(tree.density_LB(k,1), (1.0+k)/k));
   tree.add_term(12, 2); // density = 4/2
   CHECK(not tree.is_ready());
-  CHECK(eq(tree.density_LB(k), (1.0+1+(k-1)*2)/k));
+  CHECK(eq(tree.density_LB(k,2), (1.0+1+(k-1)*2)/k));
   tree.add_term(13, 3); // density = 7/3
   CHECK(tree.is_ready());
   CHECK(eq(tree.density(), 2));
-  CHECK(eq(tree.density_LB(k), tree.density()));
+  CHECK(eq(tree.density_LB(k,3), tree.density()));
   CHECK(tree.terms.size() == 2);
 
   tree.erase_and_reset({11, 12});
   CHECK(not tree.is_ready());
   CHECK(eq(tree.density(), 1+3));
-  CHECK(eq(tree.density_LB(k), (1.0+k*3)/k));
+  CHECK(eq(tree.density_LB(k,3), (1.0+k*3)/k));
   CHECK(tree.terms.size() == 1);
 
   tree.add_term(14, 4); // density = (1+3+4)/2
-  CHECK(eq(tree.density_LB(k), (1.0+3+(k-1)*4)/k));
+  CHECK(eq(tree.density_LB(k,4), (1.0+3+(k-1)*4)/k));
   tree.add_term(14, 5); // density = (1+3+4+5)/3
   CHECK(tree.is_ready());
   CHECK(eq(tree.density(), 4));
-  CHECK(eq(tree.density_LB(k), tree.density()));
+  CHECK(eq(tree.density_LB(k,4), tree.density()));
   CHECK(tree.terms.size() == 2);
-
-  PartialTree tree2 {0.5};
-  CHECK(eq(tree2.density(), 0.5));
 }
 
 
@@ -224,9 +222,37 @@ TEST_CASE("cycles") {
 }
 
 
+TEST_CASE("fast_level2") {
+  using namespace dst;
+
+  // use an arc to prune all v's along a long path
+  std::vector<std::pair<int,int>> edges {std::make_pair(0,1), 
+                                         std::make_pair(1,2), 
+                                         std::make_pair(2,3), 
+                                         std::make_pair(3,4), 
+                                         std::make_pair(4,5), 
+                                         
+                                         std::make_pair(0,5), 
+                                         };
+  std::vector<double> weights {1,1,1,1,1,1};
+  int root = 0;
+  std::vector<int> terms {5};
+  DST dt = DST(edges, weights, root, terms);
+  DEBUG_fast_level2 = true;
+
+  auto fast2 = dt.fast_level2_alg();
+  //CHECK(dt.strtest == "5:1.000000,4:5.000000,3:5.000000,2:5.000000,1:5.000000,0:1.000000,greedy_by_pruning"); // v:denlb
+  CHECK(dt.strtest == "5:1.000000,4:4.000000,3:3.000000,2:2.000000,1:1.000000,0:1.000000,greedy_by_pruning"); // prune when d_vt=0
+  
+  CHECK(eq(fast2->to_tree()->cost, 1));
+  CHECK(eq(fast2->cost_sc, 1));
+}
+
+
 TEST_CASE("level2_alg") {
   using namespace dst;
 
+  // large d(0,4) to fail level1
   std::vector<std::pair<int,int>> edges {std::make_pair(0,1), 
                                          std::make_pair(0,2), 
                                          std::make_pair(0,3), 
