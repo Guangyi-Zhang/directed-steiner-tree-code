@@ -197,7 +197,7 @@ namespace dst {
           if (has_key(*covered_by_best, tree_v->v) and not has_key(*covered, tree_v->v)) // newly covered
             tree_v->zero_drv();
 
-          if (denbest_next < tree_v->density()) {
+          if (denbest_next > tree_v->density()) {
             denbest_next = tree_v->density();
             v_best = tree_v->v;
           }
