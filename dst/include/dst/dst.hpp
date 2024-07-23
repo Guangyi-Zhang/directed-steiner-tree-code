@@ -187,19 +187,21 @@ namespace dst {
           cosssp.delete_source(t);
         }
         auto covered_by_best = par->append(best, true);
-        double denbest_next = std::numeric_limits<double>::max();
 
         // update trees and LBs
         LBs.clear();
-        for (auto v: V) { 
-          auto tree_v = trees.at(v);
+        double denbest_next = std::numeric_limits<double>::max();
+        for (auto v_tree: trees) { 
+          auto tree_v = v_tree.second;
           tree_v->erase_and_reset(best->terms);
           if (has_key(*covered_by_best, tree_v->v) and not has_key(*covered, tree_v->v)) // newly covered
             tree_v->zero_drv();
+
           if (denbest_next < tree_v->density()) {
             denbest_next = tree_v->density();
-            v_best = v;
+            v_best = tree_v->v;
           }
+
           LBs.push_back(tree_v);
         }
 
@@ -256,7 +258,6 @@ namespace dst {
           if (DEBUG) fmt::println("prune v={}, density={}, terms={}", LBs.front()->v, LBs.front()->density(), LBs.front()->terms);
           if (DEBUG_fast_level2) strtest += std::to_string(LBs.front()->v) + ":" + std::to_string(LBs.front()->density_LB(terms_dm.size() - par->terms.size(), d_vt)) + ",";
           LBs.pop_front();
-          if (LBs.empty()) break;
         }
         if (LBs.size() >= 2 or
             (LBs.size() == 1 and LBs.front()->v != v_best))
