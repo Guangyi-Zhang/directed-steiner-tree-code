@@ -249,8 +249,9 @@ namespace dst {
         if (DEBUG) fmt::println("best partree so far v={}, cost_sc={}, terms={}, LB={}", v_best, tree_best->cost_sc, tree_best->terms, LBs.front()->density_LB(terms_dm.size() - par->terms.size(), d_vt));
 
         // compare UB with LBs, remove as many LBs as possible
-        while (LBs.front()->ready or 
-               leq(tree_best->density(), LBs.front()->density_LB(terms_dm.size() - par->terms.size(), d_vt))
+        while (not LBs.empty() and
+               (LBs.front()->ready or 
+               leq(tree_best->density(), LBs.front()->density_LB(terms_dm.size() - par->terms.size(), d_vt)))
         ) {
           if (DEBUG) fmt::println("prune v={}, density={}, terms={}", LBs.front()->v, LBs.front()->density(), LBs.front()->terms);
           if (DEBUG_fast_level2) strtest += std::to_string(LBs.front()->v) + ":" + std::to_string(LBs.front()->density_LB(terms_dm.size() - par->terms.size(), d_vt)) + ",";
