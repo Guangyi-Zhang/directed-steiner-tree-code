@@ -254,6 +254,7 @@ auto main(int argc, char** argv) -> int {
   d.AddMember("n_", rapidjson::Value(dt.V.size()), a); 
   d.AddMember("m_", rapidjson::Value(dt.narcs), a); 
   d.AddMember("seed", rapidjson::Value(seed), a); 
+  d.AddMember("root", rapidjson::Value(root), a); 
   d.AddMember("dataset", rapidjson::Value(rapidjson::StringRef(dataset.c_str())), a); 
   d.AddMember("alpha", rapidjson::Value(alpha), a); 
   d.AddMember("cost", rapidjson::Value(tree->cost), a); 
@@ -264,11 +265,13 @@ auto main(int argc, char** argv) -> int {
   d.AddMember("sssp_nodes_visited", rapidjson::Value(std::stoi(debuginfo->at("sssp_nodes_visited"))), a); 
   d.AddMember("mem", rapidjson::Value(rss), a); 
 
-  /* fail with invalid output in log, don't know why
   std::stringstream ss_terms;
   std::copy(terms.begin(), terms.end(), std::ostream_iterator<int>(ss_terms, ","));
-  d.AddMember("terms", rapidjson::Value(rapidjson::StringRef(ss_terms.str().c_str())), a); 
-  */
+  std::string sterms = ss_terms.str();
+  sterms.erase(sterms.length()-1);
+  rapidjson::Value vterms;
+  vterms.SetString(sterms.c_str(), sterms.length(), a); // rapidjson::UTF8 not compatible with string
+  d.AddMember("terms", vterms, a); 
 
   rapidjson::StringBuffer buffer;
   rapidjson::Writer<rapidjson::StringBuffer> writer(buffer);
