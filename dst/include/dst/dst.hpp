@@ -275,7 +275,9 @@ namespace dst {
         if (tree_best->terms.size() == 0) // the rest terminals not reachable
           break;
         if (DEBUG_fast_level2) strtest += "greedy_by_pruning";
+        #ifndef NO_FAST2_LB
         add_greedy(tree_best);
+        #endif
       }
 
       int sssp_nodes_visited = dists_r->size();
@@ -449,11 +451,13 @@ namespace dst {
         // ***** find the best 3-level partree *****
         for (auto u: V) {
           double d_ru = has_key(*covered, u)? 0 : dists_r->at(u);
+          #ifndef NO_FAST3_PRUNE_U
           if (leq(alpha * best->density(), best2->density() - d_ru)) {
             // it is fine to skip root=u, same as best2
             // also fine to skip u in covered with d_ru=0 
             continue;
           }
+          #endif
 
           auto Q_u = &(Q.at(u));
           auto &sssp = sssp_u.at(u);
@@ -520,17 +524,23 @@ namespace dst {
 
               // try to early-terminate sssp
               double denlb = thrminden.min_density(d_uv);
+              #ifndef NO_FAST3_PRUNE_SUBTREE
               if (tree2_u != nullptr and leq(tree2_u->density(), denlb))
                 break;
+              #endif
+              #ifndef NO_FAST3_LB
               if (leq(alpha * best->density(), denlb)) {
                 is_u_pruned = true;
                 break;
               }
+              #endif
+              #ifndef NO_FAST3_PRUNE_SUBTREE
               double tree_u_LB = (tree_u->cost_sc + denlb * terms_left_u.size()) / (terms_left_u.size() + tree_u->terms.size());
               if (leq(alpha * best->density(), tree_u_LB)) {
                 is_u_pruned = true;
                 break;
               }
+              #endif
 
               double den = tbls.at(v).density(d_uv); // a lower bound of true tree2_uv
               if (tree2_u != nullptr and leq(tree2_u->density(), den)) {
