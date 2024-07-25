@@ -8,6 +8,7 @@ version=302 # @20240724: flac
 version=303 # @20240725:
 version=304 # @20240725:
 version=305 # @20240725:
+version=306 # @20240725:
 rep=1
 seed=$(date +%s)
 
