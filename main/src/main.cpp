@@ -192,6 +192,7 @@ auto main(int argc, char** argv) -> int {
 
   // one extra run of dijkstra in constructor to remove unreachable vertices
   DST dt = DST(edges, weights, root, terms);
+  spdlog::info("reachable terms= {}", dt.terms);
 
   std::clock_t c_start = std::clock();
 
@@ -272,6 +273,14 @@ auto main(int argc, char** argv) -> int {
   rapidjson::Value vterms;
   vterms.SetString(sterms.c_str(), sterms.length(), a); // rapidjson::UTF8 not compatible with string
   d.AddMember("terms", vterms, a); 
+
+  std::stringstream ss_rterms;
+  std::copy(dt.terms.begin(), dt.terms.end(), std::ostream_iterator<int>(ss_rterms, ","));
+  std::string srterms = ss_rterms.str();
+  srterms.erase(srterms.length()-1);
+  rapidjson::Value vrterms;
+  vrterms.SetString(srterms.c_str(), srterms.length(), a); // rapidjson::UTF8 not compatible with string
+  d.AddMember("reachterms", vrterms, a); 
 
   rapidjson::StringBuffer buffer;
   rapidjson::Writer<rapidjson::StringBuffer> writer(buffer);
