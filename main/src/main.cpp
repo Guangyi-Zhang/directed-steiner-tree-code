@@ -186,6 +186,7 @@ auto main(int argc, char** argv) -> int {
     terms_set.insert(t);
   }
   spdlog::info("root={}, terms= {}", root, terms);
+  terms.clear();
 
 
   /* START RUNNING */
@@ -266,21 +267,23 @@ auto main(int argc, char** argv) -> int {
   d.AddMember("sssp_nodes_visited", rapidjson::Value(std::stoi(debuginfo->at("sssp_nodes_visited"))), a); 
   d.AddMember("mem", rapidjson::Value(rss), a); 
 
-  std::stringstream ss_terms;
-  std::copy(terms.begin(), terms.end(), std::ostream_iterator<int>(ss_terms, ","));
-  std::string sterms = ss_terms.str();
-  sterms.erase(sterms.length()-1);
-  rapidjson::Value vterms;
-  vterms.SetString(sterms.c_str(), sterms.length(), a); // rapidjson::UTF8 not compatible with string
-  d.AddMember("terms", vterms, a); 
+  if (not terms.empty()) {
+    std::stringstream ss_terms;
+    std::copy(terms.begin(), terms.end(), std::ostream_iterator<int>(ss_terms, ","));
+    std::string sterms = ss_terms.str();
+    sterms.erase(sterms.length()-1);
+    rapidjson::Value vterms;
+    vterms.SetString(sterms.c_str(), sterms.length(), a); // rapidjson::UTF8 not compatible with string
+    d.AddMember("terms", vterms, a); 
 
-  std::stringstream ss_rterms;
-  std::copy(dt.terms.begin(), dt.terms.end(), std::ostream_iterator<int>(ss_rterms, ","));
-  std::string srterms = ss_rterms.str();
-  srterms.erase(srterms.length()-1);
-  rapidjson::Value vrterms;
-  vrterms.SetString(srterms.c_str(), srterms.length(), a); // rapidjson::UTF8 not compatible with string
-  d.AddMember("reachterms", vrterms, a); 
+    std::stringstream ss_rterms;
+    std::copy(dt.terms.begin(), dt.terms.end(), std::ostream_iterator<int>(ss_rterms, ","));
+    std::string srterms = ss_rterms.str();
+    srterms.erase(srterms.length()-1);
+    rapidjson::Value vrterms;
+    vrterms.SetString(srterms.c_str(), srterms.length(), a); // rapidjson::UTF8 not compatible with string
+    d.AddMember("reachterms", vrterms, a); 
+  }
 
   rapidjson::StringBuffer buffer;
   rapidjson::Writer<rapidjson::StringBuffer> writer(buffer);
