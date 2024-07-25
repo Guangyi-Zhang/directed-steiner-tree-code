@@ -524,11 +524,11 @@ namespace dst {
 
               // try to early-terminate sssp
               double denlb = thrminden.min_density(d_uv);
-              #ifndef NO_FAST3_PRUNE_SUBTREE
+              #ifndef NO_FAST3_LB
               if (tree2_u != nullptr and leq(tree2_u->density(), denlb))
                 break;
               #endif
-              #ifndef NO_FAST3_LB
+              #ifndef NO_FAST3_PRUNE_SUBTREE
               if (leq(alpha * best->density(), denlb)) {
                 is_u_pruned = true;
                 break;

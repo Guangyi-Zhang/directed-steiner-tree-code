@@ -40,6 +40,7 @@ auto main(int argc, char** argv) -> int {
     ("s,seed", "seed", cxxopts::value<int>()->default_value("-1"))
     ("k,num_of_terminals", "terminals", cxxopts::value<int>()->default_value("10"))
     ("a,alpha", "alpha", cxxopts::value<double>()->default_value("1"))
+    ("n,thresholds", "thresholds", cxxopts::value<int>()->default_value("10"))
     ("t,note", "note", cxxopts::value<std::string>()->default_value("none"))
   ;
   auto opresult = options.parse(argc, argv);
@@ -51,6 +52,7 @@ auto main(int argc, char** argv) -> int {
   std::string dataset = opresult["dataset"].as<std::string>();
   std::string note = opresult["note"].as<std::string>();
   double alpha = opresult["alpha"].as<double>();
+  int nthresholds = opresult["thresholds"].as<int>();
   int k = opresult["num_of_terminals"].as<int>();
   int rep = opresult["rep"].as<int>();
   int version = opresult["version"].as<int>();
@@ -72,7 +74,9 @@ auto main(int argc, char** argv) -> int {
   if (file.is_open()) {
     if (dataset == "soc-Epinions1.txt" or 
         dataset == "web-Google.txt" or
-        dataset == "soc-pokec-relationships.txt"
+        dataset == "soc-pokec-relationships.txt" or
+        dataset == "cit-HepPh.txt" or
+        dataset == "soc-LiveJournal1.txt" 
        ) 
     {
       std::unordered_map<int,int> id2v;
@@ -97,9 +101,15 @@ auto main(int argc, char** argv) -> int {
         m++;
       }
     } 
-    else if (dataset == "SFRoad") {
+    else if (dataset == "SFRoad" or
+        dataset == "Hongkong.road-d" or
+        dataset == "rec-libimseti-dir.edges"
+       ) 
+    {
       std::unordered_map<int,int> id2v;
       while (std::getline(file, line)) {
+        if (line[0] == '%')
+          continue;
         std::istringstream iss {line};
         int edgeid, v1, v2;
         double w;
@@ -146,8 +156,10 @@ auto main(int argc, char** argv) -> int {
         m++;
       }
     }
-    else { // synthetic random data
+    else { // synthetic random data, advogato.edges
       while (std::getline(file, line)) {
+        if (line[0] == '%')
+          continue;
         // split the line into individual values
         std::stringstream ss(line);
         std::string value;
@@ -186,7 +198,6 @@ auto main(int argc, char** argv) -> int {
     terms_set.insert(t);
   }
   spdlog::info("root={}, terms= {}", root, terms);
-  terms.clear();
 
 
   /* START RUNNING */
@@ -224,7 +235,7 @@ auto main(int argc, char** argv) -> int {
     debuginfo = &(partree->debuginfo);
   }
   else if (method.compare("fast_level3") == 0) {
-    partree = dt.fast_level3_alg(alpha);
+    partree = dt.fast_level3_alg(alpha, nthresholds);
     tree = partree->to_tree();
     debuginfo = &(partree->debuginfo);
   }
@@ -259,6 +270,8 @@ auto main(int argc, char** argv) -> int {
   d.AddMember("root", rapidjson::Value(root), a); 
   d.AddMember("dataset", rapidjson::Value(rapidjson::StringRef(dataset.c_str())), a); 
   d.AddMember("alpha", rapidjson::Value(alpha), a); 
+  d.AddMember("thresholds", rapidjson::Value(nthresholds), a); 
+
   d.AddMember("cost", rapidjson::Value(tree->cost), a); 
   d.AddMember("cost_sc", rapidjson::Value(tree->cost_sc), a); 
   d.AddMember("cost_trimmed", rapidjson::Value(tree->cost_trimmed()), a); 
@@ -266,6 +279,27 @@ auto main(int argc, char** argv) -> int {
   d.AddMember("runtime", rapidjson::Value(time_elapsed_ms), a); 
   d.AddMember("sssp_nodes_visited", rapidjson::Value(std::stoi(debuginfo->at("sssp_nodes_visited"))), a); 
   d.AddMember("mem", rapidjson::Value(rss), a); 
+
+#ifdef NO_FAST2_LB
+  d.AddMember("NO_FAST2_LB", rapidjson::Value(1), a); 
+#else
+  d.AddMember("NO_FAST2_LB", rapidjson::Value(0), a); 
+#endif
+#ifdef NO_FAST3_LB
+  d.AddMember("NO_FAST3_LB", rapidjson::Value(1), a); 
+#else
+  d.AddMember("NO_FAST3_LB", rapidjson::Value(0), a); 
+#endif
+#ifdef NO_FAST3_PRUNE_U
+  d.AddMember("NO_FAST3_PRUNE_U", rapidjson::Value(1), a); 
+#else
+  d.AddMember("NO_FAST3_PRUNE_U", rapidjson::Value(0), a); 
+#endif
+#ifdef NO_FAST3_PRUNE_SUBTREE
+  d.AddMember("NO_FAST3_PRUNE_SUBTREE", rapidjson::Value(1), a); 
+#else
+  d.AddMember("NO_FAST3_PRUNE_SUBTREE", rapidjson::Value(0), a); 
+#endif
 
   if (not terms.empty()) {
     std::stringstream ss_terms;
@@ -275,7 +309,10 @@ auto main(int argc, char** argv) -> int {
     rapidjson::Value vterms;
     vterms.SetString(sterms.c_str(), sterms.length(), a); // rapidjson::UTF8 not compatible with string
     d.AddMember("terms", vterms, a); 
+  }
 
+  if (not dt.terms.empty()) {
+    std::stringstream ss_terms;
     std::stringstream ss_rterms;
     std::copy(dt.terms.begin(), dt.terms.end(), std::ostream_iterator<int>(ss_rterms, ","));
     std::string srterms = ss_rterms.str();
