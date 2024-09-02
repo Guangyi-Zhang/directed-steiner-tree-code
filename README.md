@@ -14,7 +14,7 @@ The project requires the following prerequisites
 - Boost
 - CMake
 
-In Ubuntu, these can be installed by
+In Ubuntu, these can be installed via
 
 ```bash
 apt install -y make \
@@ -27,16 +27,31 @@ apt install -y make \
 ## Example
 
 See `./example` for a concrete example.
-Users are also referred to `./test` and `./main` for more usages.
-
 ```bash
-# or, base example.sh
+# or, bash example.sh
 cmake -S ./ -B build -DCMAKE_BUILD_TYPE=RelWithDebInfo -DUSE_TEST=0 -DUSE_MAIN=0 -DUSE_EXAMPLE=1
 cmake --build build
 ./build/example/Example
 ```
 
-Output:
+For input as follows,
+```cpp
+std::vector<std::pair<int,int>> edges {std::make_pair(0,1), 
+                                       std::make_pair(0,2), 
+                                       std::make_pair(0,3), 
+                                       std::make_pair(0,4), 
+                                       std::make_pair(1,11), 
+                                       std::make_pair(2,12), 
+                                       std::make_pair(3,13), 
+                                       std::make_pair(4,11), 
+                                       std::make_pair(4,12), 
+                                       std::make_pair(4,13)};
+std::vector<double> weights {1,1,1,2.5, 2,2,2, 1,1,1};
+std::vector<int> terms {11,12,13};
+int root = 0;
+```
+
+The output with the `fast_level2` algorithm is 
 ```
 cost 5.5, with time 0.014 ms
 └──0
@@ -49,10 +64,12 @@ cost 5.5, with time 0.014 ms
             └──14 (000.0)
 ```
 
+We refer the user to `./test` and `./main` for more usages and algorithms.
+
 ## Tests
 
 ```bash
-cmake -S ./ -B build -DCMAKE_BUILD_TYPE=RelWithDebInfo -DUSE_TEST=1 -DUSE_MAIN=0
+cmake -S ./ -B build -DCMAKE_BUILD_TYPE=RelWithDebInfo -DUSE_TEST=1 -DUSE_MAIN=0 -DUSE_EXAMPLE=0
 cmake --build build
 ./build/test/Test
 ```
