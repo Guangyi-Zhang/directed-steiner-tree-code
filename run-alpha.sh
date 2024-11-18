@@ -16,11 +16,24 @@ cmake -S ./ -B build -DCMAKE_BUILD_TYPE=$buildtype -DUSE_MAIN=1 -DUSE_TEST=0
 cmake --build build
 
 n=1000
+alpha=1
+
+
+
+#seed=1721904130
+seed=1721904187
+for nthresholds in 10000; do # 10 included above
+    nohup ./build/main/Main -b $buildtype -v $version -r $rep -s $seed -m fast_level3 -a $alpha -n $nthresholds -d random_graph_wTrue_nghb10_n${n}.csv -k 10 -t "note" &
+done
+exit
+
+
+
+
 for alpha in 1 0.9 0.8 0.7 0.6 0.5 0.4 0.3 0.2 0.1; do
     nohup ./build/main/Main -b $buildtype -v $version -r $rep -s $seed -m fast_level3 -a $alpha -d random_graph_wTrue_nghb10_n${n}.csv -k 10 -t "note" &
 done
 
-alpha=1
 for nthresholds in 1 50 100; do # 10 included above
     nohup ./build/main/Main -b $buildtype -v $version -r $rep -s $seed -m fast_level3 -a $alpha -n $nthresholds -d random_graph_wTrue_nghb10_n${n}.csv -k 10 -t "note" &
 done

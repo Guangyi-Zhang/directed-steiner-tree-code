@@ -11,7 +11,7 @@ version=405 # @20240723: bug in fast_level2 denlb
 version=406 # @20240723: bug in fast_level2 <
 version=407 # @20240724: flac
 version=408 # @20240725: flac reachable terms
-rep=1
+version=409 # @20240727: n=50
 seed=$(date +%s)
 
 cmake -S ./ -B build -DCMAKE_BUILD_TYPE=$buildtype -DUSE_MAIN=1 -DUSE_TEST=0
@@ -30,18 +30,20 @@ k=10
 
 #for dataset in soc-Epinions1.txt web-Google.txt token_transfers.csv soc-pokec-relationships.txt advogato.edges soc-LiveJournal1.txt; do
 
-#for dataset in advogato.edges; do
+rep=1
+for dataset in advogato.edges; do
 #for dataset in soc-Epinions1.txt; do
 #for dataset in web-Google.txt; do
 #for dataset in soc-pokec-relationships.txt; do
-for dataset in soc-LiveJournal1.txt; do
+#for dataset in soc-LiveJournal1.txt; do
     nohup ./build/main/Main -b $buildtype -v $version -r $rep -s $seed -m fast_level2 -d $dataset -k $k -t "note" &
     nohup ./build/main/Main -b $buildtype -v $version -r $rep -s $seed -m level2 -d $dataset -k $k -t "note" &
     nohup ./build/main/Main -b $buildtype -v $version -r $rep -s $seed -m level1 -d $dataset -k $k -t "note" &
     nohup ./build/main/Main -b $buildtype -v $version -r $rep -s $seed -m adaptive_level1 -d $dataset -k $k -t "note" &
 
-    if [ "$dataset" != "soc-LiveJournal1.txt" ] && [ "$dataset" != "web-Google.txt" ]; then
-        nohup ./build/main/Main -b $buildtype -v $version -r $rep -s $seed -m fast_level3 -a 0.5 -d $dataset -k $k -t "note" &
+    #if [ "$dataset" != "soc-LiveJournal1.txt" ] && [ "$dataset" != "web-Google.txt" ]; then
+    if [ "$dataset" != "soc-LiveJournal1.txt" ]; then
+        nohup ./build/main/Main -b $buildtype -v $version -r $rep -s $seed -m fast_level3 -a 0.5 -n 50 -d $dataset -k $k -t "note" &
     fi
 done
 

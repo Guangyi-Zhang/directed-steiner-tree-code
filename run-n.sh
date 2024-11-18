@@ -23,12 +23,12 @@ for n in 1000 10000 100000 1000000; do
 
     done
 done
-sleep 5
+sleep 60
 
-for n in 1000 10000 100000; do
-    nohup ./build/main/Main -b $buildtype -v $version -r $rep -s $seed -m fast_level3 -a 0.5 -d random_graph_wTrue_nghb10_n${n}.csv -k 10 -t "note" &
+for n in 1000 10000 100000 1000000; do
+    nohup ./build/main/Main -b $buildtype -v $version -r $rep -s $seed -m fast_level3 -a 0.5 -n 50 -d random_graph_wTrue_nghb10_n${n}.csv -k 10 -t "note" &
 done
-sleep 5
+sleep 1000 # 1M may use 90G
 
 for n in 1000 10000; do
     nohup ./build/main/Main -b $buildtype -v $version -r $rep -s $seed -m level3 -d random_graph_wTrue_nghb10_n${n}.csv -k 10 -t "note" &
