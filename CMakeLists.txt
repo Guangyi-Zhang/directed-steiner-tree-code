@@ -58,3 +58,8 @@ if(USE_MAIN)
   add_subdirectory(main)
 endif()
 
+if(USE_EXAMPLE)
+  message(STATUS "compiling ./example")
+  add_subdirectory(example)
+endif()
+
