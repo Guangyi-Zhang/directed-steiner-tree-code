@@ -76,6 +76,8 @@ auto main(int argc, char** argv) -> int {
         dataset == "web-Google.txt" or
         dataset == "soc-pokec-relationships.txt" or
         dataset == "cit-HepPh.txt" or
+        dataset == "roadNet-CA.txt" or
+        dataset == "wiki-topcats.txt" or
         dataset == "soc-LiveJournal1.txt" 
        ) 
     {

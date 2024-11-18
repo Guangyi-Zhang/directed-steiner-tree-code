@@ -12,6 +12,11 @@ version=406 # @20240723: bug in fast_level2 <
 version=407 # @20240724: flac
 version=408 # @20240725: flac reachable terms
 version=409 # @20240727: n=50
+version=410 # @20241117: road-CA
+version=411 # @20241117: token_transfers.csv
+version=413 # @20241117: token_transfers.csv
+version=414 # @20241118: test road-CA
+version=415 # @20241118: test wiki-topcats.txt
 seed=$(date +%s)
 
 cmake -S ./ -B build -DCMAKE_BUILD_TYPE=$buildtype -DUSE_MAIN=1 -DUSE_TEST=0
