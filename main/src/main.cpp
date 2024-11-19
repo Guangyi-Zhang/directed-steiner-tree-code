@@ -97,7 +97,10 @@ auto main(int argc, char** argv) -> int {
           id2v[v2] = id2v.size();
         v2 = id2v.at(v2);
 
-        edges.push_back({v1,v2});
+        if (dataset[0] == 's')
+            edges.push_back({v2,v1});
+        else
+            edges.push_back({v1,v2});
         weights.push_back(1);
         V.insert(v1); V.insert(v2);
         m++;
