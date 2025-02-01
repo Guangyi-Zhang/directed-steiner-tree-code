@@ -129,8 +129,10 @@ auto main(int argc, char** argv) -> int {
 
         edges.push_back({v1,v2});
         weights.push_back(w);
+        edges.push_back({v2,v1});
+        weights.push_back(w);
         V.insert(v1); V.insert(v2);
-        m++;
+        m++; m++;
       }
     }
     else if (dataset == "token_transfers.csv") {
