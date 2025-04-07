@@ -21,19 +21,28 @@ version=416 # @20241118: reserve wiki-topcats.txt
 version=417 # @20241119: reserve soc data
 version=418 # @20241119: reserve soc data
 version=419 # @20250201: KDD
-version=420 # @20250201: KDD again
+version=420 # @20250201: KDD again; @20250406: rebuttal
 seed=$(date +%s)
 
 cmake -S ./ -B build -DCMAKE_BUILD_TYPE=$buildtype -DUSE_MAIN=1 -DUSE_TEST=0
 cmake --build build
 
 k=10
-rep=4
+rep=1
+
+# large datasets
+#for dataset in all_csv_files.csv; do
+    #k=10
+    #k=100
+#for dataset in out.dbpedia-link; do
+    #k=15 # k_ may be smaller
+    #k=150
+#for dataset in out.twitter; do
 
 # too dis-connected
 #for dataset in cit-HepPh.txt; do
-for dataset in SFRoad; do # high variance
-    k=100
+#for dataset in SFRoad; do # high variance
+#    k=100
 #for dataset in Hongkong.road-d; do
 #for dataset in rec-libimseti-dir.edges; do # no reachable terms
     #k=1000 # doesn't work

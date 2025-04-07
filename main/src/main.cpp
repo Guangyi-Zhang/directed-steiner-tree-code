@@ -78,12 +78,16 @@ auto main(int argc, char** argv) -> int {
         dataset == "cit-HepPh.txt" or
         dataset == "roadNet-CA.txt" or
         dataset == "wiki-topcats.txt" or
+        dataset == "out.twitter" or
+        dataset == "out.dbpedia-link" or
         dataset == "soc-LiveJournal1.txt" 
        ) 
     {
       std::unordered_map<int,int> id2v;
       while (std::getline(file, line)) {
         if (line[0] == '#')
+          continue;
+        if (line[0] == '%')
           continue;
 
         std::istringstream iss {line};
@@ -97,7 +101,7 @@ auto main(int argc, char** argv) -> int {
           id2v[v2] = id2v.size();
         v2 = id2v.at(v2);
 
-        if (dataset[0] == 's')
+        if (dataset[0] == 's') // social networks
             edges.push_back({v2,v1});
         else
             edges.push_back({v1,v2});
@@ -133,6 +137,30 @@ auto main(int argc, char** argv) -> int {
         weights.push_back(w);
         V.insert(v1); V.insert(v2);
         m++; m++;
+      }
+    }
+    else if (dataset == "all_csv_files.csv") {
+      std::unordered_map<std::string,int> user2v;
+      std::unordered_map<std::string,int> item2v;
+      while (std::getline(file, line)) {
+        std::stringstream ss(line);
+        std::string value;
+
+        std::getline(ss, value, ','); // user id
+        if (not has_key(user2v, value))
+          user2v[value] = user2v.size();
+        int v1 = user2v.at(value);
+        std::getline(ss, value, ','); // item id
+        if (not has_key(item2v, value))
+          item2v[value] = item2v.size();
+        int v2 = item2v.at(value);
+        std::getline(ss, value, ','); // rating
+        double w = std::stod(value);
+
+        edges.push_back({v1,v2});
+        weights.push_back(w);
+        V.insert(v1); V.insert(v2);
+        m++;
       }
     }
     else if (dataset == "token_transfers.csv") {

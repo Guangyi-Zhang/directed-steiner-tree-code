@@ -81,6 +81,8 @@ cmake --build build
 - https://snap.stanford.edu/data/web-Google.txt.gz
 - https://snap.stanford.edu/data/wiki-topcats.html
 - https://snap.stanford.edu/data/soc-LiveJournal1.html
+- https://mcauleylab.ucsd.edu/public_datasets/data/amazon_v2/categoryFilesSmall/all_csv_files.csv
+- http://konect.cc/networks/dbpedia-link/
 
 <!-- 
 - https://snap.stanford.edu/data/soc-pokec-relationships.txt.gz
