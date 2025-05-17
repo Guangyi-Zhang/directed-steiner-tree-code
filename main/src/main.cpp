@@ -112,6 +112,7 @@ auto main(int argc, char** argv) -> int {
     } 
     else if (dataset == "SFRoad" or
         dataset == "Hongkong.road-d" or
+        dataset == "foldoc/out.foldoc" or
         dataset == "rec-libimseti-dir.edges"
        ) 
     {
@@ -122,7 +123,10 @@ auto main(int argc, char** argv) -> int {
         std::istringstream iss {line};
         int edgeid, v1, v2;
         double w;
-        iss >> edgeid >> v1 >> v2 >> w;
+        if (dataset == "SFRoad")
+          iss >> edgeid >> v1 >> v2 >> w;
+        else
+          iss >> v1 >> v2 >> w;
 
         if (not has_key(id2v, v1))
           id2v[v1] = id2v.size();

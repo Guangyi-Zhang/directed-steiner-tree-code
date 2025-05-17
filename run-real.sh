@@ -21,14 +21,17 @@ version=416 # @20241118: reserve wiki-topcats.txt
 version=417 # @20241119: reserve soc data
 version=418 # @20241119: reserve soc data
 version=419 # @20250201: KDD
-version=420 # @20250201: KDD again; @20250406: rebuttal
+version=420 # @20250201: KDD again; @20250406: rebuttal; @20250517: CIKM with k=100
 seed=$(date +%s)
 
 cmake -S ./ -B build -DCMAKE_BUILD_TYPE=$buildtype -DUSE_MAIN=1 -DUSE_TEST=0
 cmake --build build
 
-k=10
+k=100
 rep=1
+
+for rep in 1 2; do
+seed=$(date +%s)
 
 # large datasets
 #for dataset in all_csv_files.csv; do
@@ -41,8 +44,9 @@ rep=1
 
 # too dis-connected
 #for dataset in cit-HepPh.txt; do
-#for dataset in SFRoad; do # high variance
-#    k=100
+# for dataset in SFRoad; do # high variance
+#     k=10
+    # k=100
 #for dataset in Hongkong.road-d; do
 #for dataset in rec-libimseti-dir.edges; do # no reachable terms
     #k=1000 # doesn't work
@@ -51,11 +55,14 @@ rep=1
 #for dataset in token_transfers.csv; do
 
 #for dataset in soc-Epinions1.txt web-Google.txt token_transfers.csv soc-pokec-relationships.txt advogato.edges soc-LiveJournal1.txt; do
+#for dataset in soc-Epinions1.txt web-Google.txt wiki-topcats.txt advogato.edges soc-LiveJournal1.txt; do
 
 #for dataset in advogato.edges; do
 #for dataset in soc-Epinions1.txt; do
-#for dataset in web-Google.txt; do
+for dataset in web-Google.txt; do
 #for dataset in soc-pokec-relationships.txt; do
+#for dataset in rec-libimseti-dir.edges; do
+#for dataset in foldoc/out.foldoc Hongkong.road-d rec-libimseti-dir.edges; do
 #for dataset in soc-LiveJournal1.txt; do
 #for dataset in wiki-topcats.txt; do
 #for dataset in token_transfers.csv; do
@@ -86,5 +93,5 @@ rep=1
     #    java -cp .:gson-2.11.0.jar Main $line
     #done < <(python3 ../readinput.py $version $rep $dataset )
 done
-
+done
 
