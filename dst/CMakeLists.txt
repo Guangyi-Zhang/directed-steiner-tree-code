@@ -40,9 +40,25 @@ target_compile_options(${PROJECT_NAME} PUBLIC "$<$<COMPILE_LANG_AND_ID:CXX,MSVC>
 # target_link_libraries(${PROJECT_NAME} PRIVATE fmt::fmt profiler)
 target_link_libraries(${PROJECT_NAME} PRIVATE fmt::fmt)
 
+set(_local_boost_include "${CMAKE_SOURCE_DIR}/third_party/boost-dev/usr/include")
+if(Boost_INCLUDE_DIR AND NOT IS_ABSOLUTE "${Boost_INCLUDE_DIR}")
+  get_filename_component(Boost_INCLUDE_DIR "${Boost_INCLUDE_DIR}" ABSOLUTE BASE_DIR "${CMAKE_SOURCE_DIR}")
+  set(Boost_INCLUDE_DIR "${Boost_INCLUDE_DIR}" CACHE PATH "Boost include directory" FORCE)
+endif()
+if(Boost_INCLUDE_DIR AND NOT EXISTS "${Boost_INCLUDE_DIR}/boost/version.hpp")
+  unset(Boost_INCLUDE_DIR CACHE)
+endif()
+if(EXISTS "${_local_boost_include}/boost/version.hpp")
+  set(Boost_INCLUDE_DIR "${_local_boost_include}" CACHE PATH "Boost include directory" FORCE)
+endif()
+
 find_package(Boost) # container_hash is header-only
+if(NOT Boost_FOUND AND EXISTS "${_local_boost_include}/boost/version.hpp")
+  set(Boost_FOUND TRUE)
+  set(Boost_INCLUDE_DIRS "${_local_boost_include}")
+endif()
 if(Boost_FOUND)
-    target_include_directories(${PROJECT_NAME} PUBLIC ${Boost_INCLUDE_DIRS})
+  target_include_directories(${PROJECT_NAME} PUBLIC ${Boost_INCLUDE_DIRS})
 endif()
 target_include_directories(
   ${PROJECT_NAME} PUBLIC $<BUILD_INTERFACE:${PROJECT_SOURCE_DIR}/include>

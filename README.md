@@ -19,10 +19,15 @@ In Ubuntu, these can be installed via
 ```bash
 apt install -y make \
                build-essential \
-               cmake \
-               libboost-all-dev
+               cmake
 ```
 
+and locally under `third_party/` (auto-detected by CMake):
+
+```bash
+apt download libboost1.83-dev
+dpkg-deb -x libboost1.83-dev_*.deb ./third_party/boost-dev
+```
 
 ## Example
 

@@ -3,3 +3,10 @@
 /cpm_modules
 .DS_Store
 ._*
+/third_party
+
+datasets/
+logs/
+paper/
+playground/
+notebooks/
