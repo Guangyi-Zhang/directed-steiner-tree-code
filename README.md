@@ -81,6 +81,10 @@ cmake --build build
 
 ## Datasets
 
+```bash
+uv sync
+```
+
 - https://networkrepository.com/advogato.php
 - https://snap.stanford.edu/data/soc-Epinions1.txt.gz
 - https://snap.stanford.edu/data/web-Google.txt.gz
