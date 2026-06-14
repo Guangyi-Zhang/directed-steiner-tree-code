@@ -42,6 +42,7 @@ auto main(int argc, char** argv) -> int {
     ("a,alpha", "alpha", cxxopts::value<double>()->default_value("1"))
     ("n,thresholds", "thresholds", cxxopts::value<int>()->default_value("10"))
     ("t,note", "note", cxxopts::value<std::string>()->default_value("none"))
+    ("l,logfile", "log file", cxxopts::value<std::string>()->default_value("logs/basic-log.txt"))
   ;
   auto opresult = options.parse(argc, argv);
 
@@ -51,6 +52,7 @@ auto main(int argc, char** argv) -> int {
   std::string method = opresult["method"].as<std::string>();
   std::string dataset = opresult["dataset"].as<std::string>();
   std::string note = opresult["note"].as<std::string>();
+  std::string logfile = opresult["logfile"].as<std::string>();
   double alpha = opresult["alpha"].as<double>();
   int nthresholds = opresult["thresholds"].as<int>();
   int k = opresult["num_of_terminals"].as<int>();
@@ -367,7 +369,7 @@ auto main(int argc, char** argv) -> int {
 
   // setup logger
   try {
-    auto logger = spdlog::basic_logger_mt("basic_logger", "logs/basic-log.txt");
+    auto logger = spdlog::basic_logger_mt("basic_logger", logfile);
     spdlog::set_default_logger(logger);
   }
   catch (const spdlog::spdlog_ex &ex) {
