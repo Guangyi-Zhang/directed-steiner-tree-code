@@ -377,6 +377,7 @@ namespace dst {
 
 
     auto residual_weights(const std::shared_ptr<Tree> tree) const {
+      // Set all tree edges to cost 0
       auto w_res = w;
       for (auto &p: tree->trace) {
         int v = p.first;
@@ -443,14 +444,17 @@ namespace dst {
 
 
     auto full_adaptive_level2_alg() {
+      // Root-adaptive variant (adaptive_level2) fixes terminal-side distances;
+      // here both sides are recomputed each iteration on residual weights.
       auto par = std::make_shared<PartialTreeManager> (root);
       std::unordered_set<int> terms_left(terms_dm.begin(), terms_dm.end());
       int sssp_nodes_visited = 0;
 
       while (terms_left.size() > 0) {
-        auto w_res = residual_weights(par->totree);
+        auto w_res = residual_weights(par->totree); // Paid tree edges cost 0
         auto [dists_r, trace_r] = dijkstra(adj, w_res, root);
 
+        // Backward Dijkstra from each remaining terminal on w_res.
         auto trace_t = std::make_shared<std::unordered_map<int, std::shared_ptr<std::unordered_map<int,int>>>>();
         auto dists_t = std::make_shared<std::unordered_map<int, std::shared_ptr<std::unordered_map<int,double>>>>();
         for (auto t: terms_left) {
@@ -466,6 +470,7 @@ namespace dst {
         par->trace_r = trace_r;
         par->trace_t = trace_t;
 
+        // Greedy 2-level bunch: pick v minimizing density among uncovered terms.
         std::shared_ptr<PartialTree> best = nullptr;
         for (auto v: V) {
           if (not has_key(*dists_r, v))
