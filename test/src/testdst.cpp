@@ -175,6 +175,14 @@ TEST_CASE("dijkstra") {
 
   auto p4 = dijkstra(dt.adj, dt.w, 0, false, {3});
   CHECK (not has_key(*std::get<0>(p4), 4));
+
+  std::tie(dists, trace) = dijkstra_multisource(dt.adj, dt.w, {1, 3});
+  CHECK(dists->at(1) == 0);
+  CHECK(dists->at(3) == 0);
+  CHECK(dists->at(2) == 1);
+  CHECK(dists->at(4) == 1);
+  CHECK(trace->at(1) == NONVERTEX);
+  CHECK(trace->at(3) == NONVERTEX);
 }
 
 

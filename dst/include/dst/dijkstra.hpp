@@ -60,6 +60,53 @@ namespace dst {
   }
 
 
+  auto dijkstra_multisource(
+      const std::unordered_map<int, std::vector<int>> &adj,
+      const std::unordered_map<std::pair<int,int>, double, boost::hash<std::pair<int,int>>> &edgeweight,
+      const std::unordered_set<int> &sources,
+      bool reverse=false,
+      const std::unordered_set<int> &to_reach=std::unordered_set<int> {}
+  ) {
+    auto distances = std::make_shared<std::unordered_map<int,double>>();
+    auto trace = std::make_shared<std::unordered_map<int,int>>();
+    std::priority_queue<std::tuple<double,int,int>,
+                        std::vector<std::tuple<double,int,int>>,
+                        std::greater<std::tuple<double,int,int>>> pq;
+    for (auto source: sources) {
+      pq.emplace(0, NONVERTEX, source);
+    }
+    size_t n_reached = 0;
+
+    while (!pq.empty()) {
+      double d_u;
+      int u_prev, u;
+      std::tie(d_u, u_prev, u) = pq.top();
+      pq.pop();
+
+      if (has_key(*distances, u))
+        continue;
+      (*distances)[u] = d_u;
+      (*trace)[u] = u_prev;
+      if (to_reach.size() > 0 and has_key(to_reach, u)) {
+        n_reached++;
+        if (to_reach.size() == n_reached)
+          break;
+      }
+
+      if (not has_key(adj, u))
+        continue;
+      for (const auto& v: adj.at(u)) {
+        if (has_key(*distances, v))
+          continue;
+        double weight = reverse? edgeweight.at({v,u}) : edgeweight.at({u,v});
+        pq.emplace(d_u + weight, u, v);
+      }
+    }
+
+    return std::make_tuple(distances, trace);
+  }
+
+
   class Dijkstra {
     public:
     const std::unordered_map<int, std::vector<int>> *padj {nullptr};

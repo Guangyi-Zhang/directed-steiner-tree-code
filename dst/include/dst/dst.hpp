@@ -365,6 +365,134 @@ namespace dst {
     }
 
 
+    auto tree_vertices(const std::shared_ptr<Tree> tree) const {
+      std::unordered_set<int> vertices;
+      for (auto &p: tree->trace) {
+        vertices.insert(p.first);
+        if (p.second != NONVERTEX)
+          vertices.insert(p.second);
+      }
+      return vertices;
+    }
+
+
+    auto residual_weights(const std::shared_ptr<Tree> tree) const {
+      auto w_res = w;
+      for (auto &p: tree->trace) {
+        int v = p.first;
+        int u = p.second;
+        if (u == NONVERTEX)
+          continue;
+        auto e = std::make_pair(u, v);
+        if (has_key(w_res, e))
+          w_res[e] = 0;
+      }
+      return w_res;
+    }
+
+
+    auto adaptive_level2_alg() {
+      // Terminal-side distances are fixed in the root-adaptive variant.
+      auto trace_t = std::make_shared<std::unordered_map<int, std::shared_ptr<std::unordered_map<int,int>>>>();
+      auto dists_t = std::make_shared<std::unordered_map<int, std::shared_ptr<std::unordered_map<int,double>>>>();
+      for (auto t: terms_dm) {
+        auto [dists_, trace_] = dijkstra(adj_r, w, t, true);
+        (*dists_t)[t] = dists_;
+        (*trace_t)[t] = trace_;
+      }
+
+      auto par = std::make_shared<PartialTreeManager> (root);
+      par->trace_t = trace_t;
+      std::unordered_set<int> terms_left(terms_dm.begin(), terms_dm.end());
+      int sssp_nodes_visited = 0;
+      for (auto &p: *dists_t) {
+        sssp_nodes_visited += p.second->size();
+      }
+
+      while (terms_left.size() > 0) {
+        auto sources = tree_vertices(par->totree);
+        auto [dists_r, trace_r] = dijkstra_multisource(adj, w, sources);
+        sssp_nodes_visited += dists_r->size();
+        par->trace_r = trace_r;
+
+        std::shared_ptr<PartialTree> best = nullptr;
+        for (auto v: V) {
+          if (not has_key(*dists_r, v))
+            continue;
+          auto tree_v = level2_through_v(root, v, dists_r->at(v), dists_t, terms_left);
+
+          if (best == nullptr or
+              tree_v->density() < best->density() or
+              (eq(tree_v->density(), best->density()) and
+               tree_v->terms.size() > best->terms.size())) {
+            best = tree_v;
+          }
+        }
+
+        if (best == nullptr or best->terms.size() == 0)
+          break;
+
+        for (auto t: best->terms)
+          terms_left.erase(t);
+        par->append(best, true);
+      }
+
+      par->debuginfo["sssp_nodes_visited"] = std::to_string(sssp_nodes_visited);
+      return par;
+    }
+
+
+    auto full_adaptive_level2_alg() {
+      auto par = std::make_shared<PartialTreeManager> (root);
+      std::unordered_set<int> terms_left(terms_dm.begin(), terms_dm.end());
+      int sssp_nodes_visited = 0;
+
+      while (terms_left.size() > 0) {
+        auto w_res = residual_weights(par->totree);
+        auto [dists_r, trace_r] = dijkstra(adj, w_res, root);
+
+        auto trace_t = std::make_shared<std::unordered_map<int, std::shared_ptr<std::unordered_map<int,int>>>>();
+        auto dists_t = std::make_shared<std::unordered_map<int, std::shared_ptr<std::unordered_map<int,double>>>>();
+        for (auto t: terms_left) {
+          auto [dists_, trace_] = dijkstra(adj_r, w_res, t, true);
+          (*dists_t)[t] = dists_;
+          (*trace_t)[t] = trace_;
+        }
+
+        sssp_nodes_visited += dists_r->size();
+        for (auto &p: *dists_t) {
+          sssp_nodes_visited += p.second->size();
+        }
+        par->trace_r = trace_r;
+        par->trace_t = trace_t;
+
+        std::shared_ptr<PartialTree> best = nullptr;
+        for (auto v: V) {
+          if (not has_key(*dists_r, v))
+            continue;
+          auto tree_v = level2_through_v(root, v, dists_r->at(v), dists_t, terms_left);
+
+          if (best == nullptr or
+              tree_v->density() < best->density() or
+              (eq(tree_v->density(), best->density()) and
+               tree_v->terms.size() > best->terms.size())) {
+            best = tree_v;
+          }
+        }
+
+        if (best == nullptr or best->terms.size() == 0)
+          break;
+
+        for (auto t: best->terms)
+          terms_left.erase(t);
+        par->append(best, true);
+      }
+
+      par->debuginfo["sssp_nodes_visited"] = std::to_string(sssp_nodes_visited);
+      return par;
+    }
+
+
     auto fast_level3_alg(double alpha=1.0, int n_thresholds=10) {
       /*---------------
        | Pre-compute

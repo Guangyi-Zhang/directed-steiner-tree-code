@@ -279,5 +279,14 @@ TEST_CASE("level2_alg") {
   CHECK(tree->to_tree()->cost == 2.5 + 1*3);
   CHECK(tree->cost_sc == 2.5 + 1*3);
   CHECK((tree->terms == std::unordered_set<int> {14,15,16}));
-}
 
+  tree = dt.adaptive_level2_alg();
+  CHECK(tree->to_tree()->cost == 2.5 + 1*3);
+  CHECK(tree->cost_sc == 2.5 + 1*3);
+  CHECK((tree->terms == std::unordered_set<int> {14,15,16}));
+
+  tree = dt.full_adaptive_level2_alg();
+  CHECK(tree->to_tree()->cost == 2.5 + 1*3);
+  CHECK(tree->cost_sc == 2.5 + 1*3);
+  CHECK((tree->terms == std::unordered_set<int> {14,15,16}));
+}

@@ -70,6 +70,9 @@ cost 5.5, with time 0.014 ms
 ```
 
 We refer the user to `./test` and `./main` for more usages and algorithms.
+The main experiment binary accepts `level1`, `adaptive_level1`, `level2`,
+`adaptive_level2` (also `root_adaptive_level2`), `full_adaptive_level2`,
+`fast_level2`, `level3`, and `fast_level3`.
 
 ## Tests
 
@@ -80,10 +83,6 @@ cmake --build build
 ```
 
 ## Datasets
-
-```bash
-uv sync
-```
 
 - https://networkrepository.com/advogato.php
 - https://snap.stanford.edu/data/soc-Epinions1.txt.gz
@@ -105,3 +104,5 @@ uv sync
 - https://users.cs.utah.edu/~lifeifei/research/tpq/SF.cedge
 - https://users.cs.utah.edu/~lifeifei/research/tpq/cal.cedge
 -->
+
+For synthetic datasets, see `data.py`, and run `uv sync` to install the dependencies.
