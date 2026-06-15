@@ -177,6 +177,7 @@ TEST_CASE("dijkstra") {
   CHECK (not has_key(*std::get<0>(p4), 4));
 
   std::tie(dists, trace) = dijkstra_multisource(dt.adj, dt.w, {1, 3});
+  CHECK(dists->find(0) == dists->end());  // 0 not reachable
   CHECK(dists->at(1) == 0);
   CHECK(dists->at(3) == 0);
   CHECK(dists->at(2) == 1);

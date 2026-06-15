@@ -60,6 +60,7 @@ namespace dst {
   }
 
 
+  // Shortest paths from `sources` (dist=0 at each source).
   auto dijkstra_multisource(
       const std::unordered_map<int, std::vector<int>> &adj,
       const std::unordered_map<std::pair<int,int>, double, boost::hash<std::pair<int,int>>> &edgeweight,
@@ -69,6 +70,7 @@ namespace dst {
   ) {
     auto distances = std::make_shared<std::unordered_map<int,double>>();
     auto trace = std::make_shared<std::unordered_map<int,int>>();
+    // (distance, predecessor, vertex); min-heap by distance
     std::priority_queue<std::tuple<double,int,int>,
                         std::vector<std::tuple<double,int,int>>,
                         std::greater<std::tuple<double,int,int>>> pq;
@@ -84,13 +86,13 @@ namespace dst {
       pq.pop();
 
       if (has_key(*distances, u))
-        continue;
+        continue; // already settled with a shorter path
       (*distances)[u] = d_u;
       (*trace)[u] = u_prev;
       if (to_reach.size() > 0 and has_key(to_reach, u)) {
         n_reached++;
         if (to_reach.size() == n_reached)
-          break;
+          break; // stop once every target is settled
       }
 
       if (not has_key(adj, u))
