@@ -249,6 +249,101 @@ TEST_CASE("fast_level2") {
 }
 
 
+TEST_CASE("adaptive_level2_reuses_root_side_distance") {
+  using namespace dst;
+
+  /*
+    <---+0+--->
+          |(4)
+          v
+          1+--(1)-->11
+          |(5)
+          v
+          2+--(1)-->21
+          +
+          |(1)
+          v
+         22
+
+    After covering terminal 11 through vertex 1, vertex 2 is reachable from the
+    current tree with marginal cost 5. fast_level2 keeps the original root-side
+    distance to 2, while adaptive_level2 and full_adaptive_level2 pay only the
+    marginal root-side distance for the second two-terminal bunch.
+  */
+  std::vector<std::pair<int,int>> edges {std::make_pair(0,1),
+                                         std::make_pair(1,11),
+                                         std::make_pair(1,2),
+                                         std::make_pair(2,21),
+                                         std::make_pair(2,22)};
+  std::vector<double> weights {4,1,5,1,1};
+  std::vector<int> terms {11,21,22};
+  DST dt = DST(edges, weights, 0, terms);
+
+  auto fast2 = dt.fast_level2_alg();
+  auto adaptive2 = dt.adaptive_level2_alg();
+  auto full_adaptive2 = dt.full_adaptive_level2_alg();
+
+  CHECK(eq(fast2->cost_sc, 16));
+  CHECK(eq(adaptive2->cost_sc, 12));
+  CHECK(eq(full_adaptive2->cost_sc, 12));
+
+  CHECK(eq(fast2->to_tree()->cost, 12));
+  CHECK(eq(adaptive2->to_tree()->cost, 12));
+  CHECK(eq(full_adaptive2->to_tree()->cost, 12));
+}
+
+
+TEST_CASE("full_adaptive_level2_reuses_terminal_side_residual_paths") {
+  using namespace dst;
+
+  /*
+    <---+0+--(2)-->4
+    |(8)  |
+    v     +--(1)-->6+--(2)-->5
+    2     |
+          +--(4)-->5
+
+    All three algorithms find the same final tree (cost 5): 0->6, 0->4, 6->5.
+    fast_level2 and adaptive_level2 take three greedy bunches: {6}, then {5}
+    through v=6, then {4} through v=0. The terminal-side distance 6->5 is
+    always 2, so after {6} is covered, {5} alone through v=6 has density 2.
+    Bunching {4,5} needs a shared middle vertex; through v=0 that costs
+    d_4(0)+d_5(0)=2+3=5 (density 2.5). 
+    full_adaptive_level2 takes two bunches: {6}, then {4,5} through v=0.
+    Residual weights zero out 0->6, so the terminal-side distance d_5(0)
+    drops to 2 via 5->6->0 and bunching {4,5} reaches density 2 as well.
+  */
+  std::vector<std::pair<int,int>> edges {std::make_pair(0,2),
+                                         std::make_pair(0,4),
+                                         std::make_pair(0,5),
+                                         std::make_pair(0,6),
+                                         std::make_pair(2,6),
+                                         std::make_pair(3,1),
+                                         std::make_pair(3,4),
+                                         std::make_pair(5,0),
+                                         std::make_pair(6,0),
+                                         std::make_pair(6,3),
+                                         std::make_pair(6,4),
+                                         std::make_pair(6,5)};
+  std::vector<double> weights {8,2,4,1,6,4,8,6,4,1,6,2};
+  std::vector<int> terms {4,5,6};
+  DST dt = DST(edges, weights, 0, terms);
+
+  auto fast2 = dt.fast_level2_alg();
+  auto adaptive2 = dt.adaptive_level2_alg();
+  auto full_adaptive2 = dt.full_adaptive_level2_alg();
+
+  CHECK(eq(fast2->cost_sc, 5));
+  CHECK(eq(adaptive2->cost_sc, 5));
+  CHECK(eq(full_adaptive2->cost_sc, 5));
+
+  CHECK(fast2->subtrees.size() == 3);
+  CHECK(adaptive2->subtrees.size() == 3);
+  CHECK(full_adaptive2->subtrees.size() == 2);
+  CHECK(full_adaptive2->subtrees.back().first->terms.size() == 2);
+}
+
+
 TEST_CASE("level2_alg") {
   using namespace dst;
 
