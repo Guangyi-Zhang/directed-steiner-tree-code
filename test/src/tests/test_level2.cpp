@@ -281,15 +281,21 @@ TEST_CASE("adaptive_level2_reuses_root_side_distance") {
 
   auto fast2 = dt.fast_level2_alg();
   auto adaptive2 = dt.adaptive_level2_alg();
+  auto adaptive_fast2 = dt.adaptive_fast_level2_alg();
   auto full_adaptive2 = dt.full_adaptive_level2_alg();
+  auto full_adaptive_fast2 = dt.full_adaptive_fast_level2_alg();
 
   CHECK(eq(fast2->cost_sc, 16));
   CHECK(eq(adaptive2->cost_sc, 12));
+  CHECK(eq(adaptive_fast2->cost_sc, 12));
   CHECK(eq(full_adaptive2->cost_sc, 12));
+  CHECK(eq(full_adaptive_fast2->cost_sc, 12));
 
   CHECK(eq(fast2->to_tree()->cost, 12));
   CHECK(eq(adaptive2->to_tree()->cost, 12));
+  CHECK(eq(adaptive_fast2->to_tree()->cost, 12));
   CHECK(eq(full_adaptive2->to_tree()->cost, 12));
+  CHECK(eq(full_adaptive_fast2->to_tree()->cost, 12));
 }
 
 
@@ -331,16 +337,23 @@ TEST_CASE("full_adaptive_level2_reuses_terminal_side_residual_paths") {
 
   auto fast2 = dt.fast_level2_alg();
   auto adaptive2 = dt.adaptive_level2_alg();
+  auto adaptive_fast2 = dt.adaptive_fast_level2_alg();
   auto full_adaptive2 = dt.full_adaptive_level2_alg();
+  auto full_adaptive_fast2 = dt.full_adaptive_fast_level2_alg();
 
   CHECK(eq(fast2->cost_sc, 5));
   CHECK(eq(adaptive2->cost_sc, 5));
+  CHECK(eq(adaptive_fast2->cost_sc, 5));
   CHECK(eq(full_adaptive2->cost_sc, 5));
+  CHECK(eq(full_adaptive_fast2->cost_sc, 5));
 
   CHECK(fast2->subtrees.size() == 3);
   CHECK(adaptive2->subtrees.size() == 3);
+  CHECK(adaptive_fast2->subtrees.size() == 3);
   CHECK(full_adaptive2->subtrees.size() == 2);
+  CHECK(full_adaptive_fast2->subtrees.size() == 2);
   CHECK(full_adaptive2->subtrees.back().first->terms.size() == 2);
+  CHECK(full_adaptive_fast2->subtrees.back().first->terms.size() == 2);
 }
 
 
@@ -380,7 +393,17 @@ TEST_CASE("level2_alg") {
   CHECK(tree->cost_sc == 2.5 + 1*3);
   CHECK((tree->terms == std::unordered_set<int> {14,15,16}));
 
+  tree = dt.adaptive_fast_level2_alg();
+  CHECK(tree->to_tree()->cost == 2.5 + 1*3);
+  CHECK(tree->cost_sc == 2.5 + 1*3);
+  CHECK((tree->terms == std::unordered_set<int> {14,15,16}));
+
   tree = dt.full_adaptive_level2_alg();
+  CHECK(tree->to_tree()->cost == 2.5 + 1*3);
+  CHECK(tree->cost_sc == 2.5 + 1*3);
+  CHECK((tree->terms == std::unordered_set<int> {14,15,16}));
+
+  tree = dt.full_adaptive_fast_level2_alg();
   CHECK(tree->to_tree()->cost == 2.5 + 1*3);
   CHECK(tree->cost_sc == 2.5 + 1*3);
   CHECK((tree->terms == std::unordered_set<int> {14,15,16}));

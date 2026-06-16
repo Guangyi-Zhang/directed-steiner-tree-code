@@ -71,8 +71,9 @@ cost 5.5, with time 0.014 ms
 
 We refer the user to `./test` and `./main` for more usages and algorithms.
 The main experiment binary accepts `level1`, `adaptive_level1`, `level2`,
-`adaptive_level2` (also `root_adaptive_level2`), `full_adaptive_level2`,
-`fast_level2`, `level3`, and `fast_level3`.
+`adaptive_level2` (also `root_adaptive_level2`), `adaptive_fast_level2`
+(also `root_adaptive_fast_level2`), `full_adaptive_level2`,
+`full_adaptive_fast_level2`, `fast_level2`, `level3`, and `fast_level3`.
 
 ## Tests
 

@@ -270,8 +270,18 @@ auto main(int argc, char** argv) -> int {
     tree = partree->to_tree();
     debuginfo = &(partree->debuginfo);
   }
+  else if (method.compare("adaptive_fast_level2") == 0 or method.compare("root_adaptive_fast_level2") == 0) {
+    partree = dt.adaptive_fast_level2_alg();
+    tree = partree->to_tree();
+    debuginfo = &(partree->debuginfo);
+  }
   else if (method.compare("full_adaptive_level2") == 0) {
     partree = dt.full_adaptive_level2_alg();
+    tree = partree->to_tree();
+    debuginfo = &(partree->debuginfo);
+  }
+  else if (method.compare("full_adaptive_fast_level2") == 0) {
+    partree = dt.full_adaptive_fast_level2_alg();
     tree = partree->to_tree();
     debuginfo = &(partree->debuginfo);
   }

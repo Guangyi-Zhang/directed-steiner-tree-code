@@ -121,6 +121,10 @@ namespace dst {
     }
 
 
+    /*
+     * level2_through_v builds one 2-level bunch root->v->{t}: terminals reachable from v are
+     * added in increasing v-t distance until density would rise.
+     */
     auto level2_through_v(
         int r,
         int v, 
@@ -484,6 +488,158 @@ namespace dst {
             best = tree_v;
           }
         }
+
+        if (best == nullptr or best->terms.size() == 0)
+          break;
+
+        for (auto t: best->terms)
+          terms_left.erase(t);
+        par->append(best, true);
+      }
+
+      par->debuginfo["sssp_nodes_visited"] = std::to_string(sssp_nodes_visited);
+      return par;
+    }
+
+
+    // One greedy step: pick a 2-level bunch (root->v->terminals) minimizing density.
+    auto fast_level2_minden(
+        std::shared_ptr<std::unordered_map<int,double>> dists_r,
+        const std::unordered_set<int> &terms_left,
+        const std::unordered_map<std::pair<int,int>, double, boost::hash<std::pair<int,int>>> &edgeweight
+    ) {
+      // init a PartialTree for each v reachable from root
+      std::unordered_map<int, std::shared_ptr<PartialTree>> trees;
+      std::list<std::shared_ptr<PartialTree>> LBs;
+      for (auto v: V) {
+        if (not has_key(*dists_r, v))
+          continue;
+        trees[v] = std::make_shared<PartialTree> (root, v, dists_r->at(v));
+        LBs.push_back(trees.at(v));
+      }
+
+      CoordinatedDijkstra cosssp {adj_r, edgeweight, terms_left, true}; // backward Dijkstra from each remaining terminal
+      int v_best {NONVERTEX};
+
+      // function: update the v_best with lowest density (UB) if tree_v has lower density
+      auto update_best = [&] (std::shared_ptr<PartialTree> tree_v) {
+        if (v_best == NONVERTEX) {
+          v_best = tree_v->v;
+          return;
+        }
+        auto tree_best = trees.at(v_best);
+        if (tree_v->density() < tree_best->density() or
+            (eq(tree_v->density(), tree_best->density()) and
+             tree_v->terms.size() > tree_best->terms.size())) {
+          v_best = tree_v->v;
+        }
+      };
+
+      // function: choose the v_best with lowest density (UB)
+      auto choose_best = [&] () {
+        for (auto &p: trees) {
+          update_best(p.second);
+        }
+        if (v_best == NONVERTEX)
+          return std::shared_ptr<PartialTree> {nullptr};
+        return trees.at(v_best);
+      };
+
+      while (true) {
+        auto [t, v, d_vt] = cosssp.next();
+        if (t == NONVERTEX) { // coordinated SSSP exhausted
+          auto best = choose_best();
+          int sssp_nodes_visited = 0;
+          for (auto &p: *(cosssp.distances_t))
+            sssp_nodes_visited += p.second->size();
+          return std::make_tuple(best, cosssp.trace_t, sssp_nodes_visited);
+        }
+
+        if (has_key(terms_dm, v) or not has_key(trees, v))
+          continue;
+
+        auto tree_v = trees.at(v);
+        tree_v->add_term(t, d_vt);
+        update_best(tree_v);
+        auto tree_best = trees.at(v_best);
+
+        // prune LBs that cannot beat the current UB
+        for (auto it = LBs.begin(); it != LBs.end(); ) {
+          auto tree_lb = *it;
+          if (tree_lb->ready or
+              leq(tree_best->density(), tree_lb->density_LB(terms_left.size(), d_vt))) {
+            it = LBs.erase(it); // safe only for list
+          } else {
+            ++it;
+          }
+        }
+
+        // wait until only v_best remains among surviving LBs
+        bool has_other_lb = false;
+        for (auto tree_lb: LBs) {
+          if (tree_lb->v != v_best) {
+            has_other_lb = true;
+            break;
+          }
+        }
+        if (has_other_lb)
+          continue;
+
+        // early stop once the best tree is fully determined
+        if (not tree_best->is_ready(d_vt) and
+            tree_best->terms.size() < terms_left.size())
+          continue;
+
+        int sssp_nodes_visited = 0;
+        for (auto &p: *(cosssp.distances_t))
+          sssp_nodes_visited += p.second->size();
+        return std::make_tuple(tree_best, cosssp.trace_t, sssp_nodes_visited);
+      }
+    }
+
+
+    auto adaptive_fast_level2_alg() {
+      auto par = std::make_shared<PartialTreeManager> (root);
+      std::unordered_set<int> terms_left(terms_dm.begin(), terms_dm.end());
+      int sssp_nodes_visited = 0;
+
+      while (terms_left.size() > 0) {
+        auto sources = tree_vertices(par->totree);
+        auto [dists_r, trace_r] = dijkstra_multisource(adj, w, sources);
+        sssp_nodes_visited += dists_r->size();
+
+        auto [best, trace_t, sssp_t] = fast_level2_minden(dists_r, terms_left, w);
+        sssp_nodes_visited += sssp_t;
+        par->trace_r = trace_r;
+        par->trace_t = trace_t;
+
+        if (best == nullptr or best->terms.size() == 0)
+          break;
+
+        for (auto t: best->terms)
+          terms_left.erase(t);
+        par->append(best, true);
+      }
+
+      par->debuginfo["sssp_nodes_visited"] = std::to_string(sssp_nodes_visited);
+      return par;
+    }
+
+
+    auto full_adaptive_fast_level2_alg() {
+      auto par = std::make_shared<PartialTreeManager> (root);
+      std::unordered_set<int> terms_left(terms_dm.begin(), terms_dm.end());
+      int sssp_nodes_visited = 0;
+
+      while (terms_left.size() > 0) {
+        auto w_res = residual_weights(par->totree);
+        auto [dists_r, trace_r] = dijkstra(adj, w_res, root);
+        sssp_nodes_visited += dists_r->size();
+
+        auto [best, trace_t, sssp_t] = fast_level2_minden(dists_r, terms_left, w_res);
+        sssp_nodes_visited += sssp_t;
+        par->trace_r = trace_r;
+        par->trace_t = trace_t;
 
         if (best == nullptr or best->terms.size() == 0)
           break;
