@@ -600,27 +600,118 @@ namespace dst {
 
     auto adaptive_fast_level2_alg() {
       auto par = std::make_shared<PartialTreeManager> (root);
+      par->trace_t = nullptr;
       std::unordered_set<int> terms_left(terms_dm.begin(), terms_dm.end());
-      int sssp_nodes_visited = 0;
+      std::unordered_map<int, AdaptiveLevel2CenterIndex> center_idxs;
+      for (auto v: V) {
+        center_idxs.emplace(v, AdaptiveLevel2CenterIndex(v, terms_dm.size()));
+      }
+
+      CoordinatedDijkstra cosssp {adj_r, w, terms_dm, true};
+      par->trace_t = cosssp.trace_t;
+      int root_sssp_nodes_visited = 0;
+      double terminal_lb = 0;
+      bool terminal_search_exhausted = false;
+
+      auto better_tree = [](
+          const std::shared_ptr<PartialTree> &a,
+          const std::shared_ptr<PartialTree> &b
+      ) {
+        if (a == nullptr)
+          return false;
+        if (b == nullptr)
+          return true;
+        return a->density() < b->density() or
+               (eq(a->density(), b->density()) and
+                a->terms.size() > b->terms.size());
+      };
+
+      auto better_bound = [](
+          const AdaptiveLevel2PrefixBound &a,
+          const std::shared_ptr<PartialTree> &b
+      ) {
+        if (a.nterm == 0)
+          return false;
+        if (b == nullptr)
+          return true;
+        return a.density < b->density() or
+               (eq(a.density, b->density()) and
+                static_cast<size_t>(a.nterm) > b->terms.size());
+      };
 
       while (terms_left.size() > 0) {
         auto sources = tree_vertices(par->totree);
         auto [dists_r, trace_r] = dijkstra_multisource(adj, w, sources);
-        sssp_nodes_visited += dists_r->size();
-
-        auto [best, trace_t, sssp_t] = fast_level2_minden(dists_r, terms_left, w);
-        sssp_nodes_visited += sssp_t;
+        root_sssp_nodes_visited += dists_r->size();
         par->trace_r = trace_r;
-        par->trace_t = trace_t;
+
+        std::shared_ptr<PartialTree> best = nullptr;
+        while (true) {
+          best = nullptr;
+          bool certified = true;
+          for (auto &p: center_idxs) {
+            int v = p.first;
+            if (not has_key(*dists_r, v))
+              continue;
+
+            auto tree_v = p.second.partree(root, dists_r->at(v));
+            if (tree_v->terms.size() > 0 and better_tree(tree_v, best))
+              best = tree_v;
+          }
+
+          if (best != nullptr) {
+            for (auto &p: center_idxs) {
+              int v = p.first;
+              if (not has_key(*dists_r, v))
+                continue;
+
+              auto lower = p.second.optimistic_bound(
+                  dists_r->at(v),
+                  terms_left.size(),
+                  terminal_lb,
+                  terminal_search_exhausted
+              );
+              if (better_bound(lower, best)) {
+                certified = false;
+                break;
+              }
+            }
+
+            if (certified)
+              break;
+          }
+
+          if (terminal_search_exhausted)
+            break;
+
+          auto [t, v, d_vt] = cosssp.next();
+          if (t == NONVERTEX) {
+            terminal_search_exhausted = true;
+            terminal_lb = std::numeric_limits<double>::infinity();
+            continue;
+          }
+
+          terminal_lb = d_vt;
+          if (has_key(center_idxs, v))
+            center_idxs.at(v).insert(t, d_vt);
+        }
 
         if (best == nullptr or best->terms.size() == 0)
           break;
 
-        for (auto t: best->terms)
+        for (auto t: best->terms) {
           terms_left.erase(t);
+          cosssp.delete_source(t);
+        }
+        for (auto &p: center_idxs)
+          p.second.erase(best->terms);
         par->append(best, true);
       }
 
+      int sssp_nodes_visited = root_sssp_nodes_visited;
+      for (auto &p: *(cosssp.distances_t)) {
+        sssp_nodes_visited += p.second->size();
+      }
       par->debuginfo["sssp_nodes_visited"] = std::to_string(sssp_nodes_visited);
       return par;
     }

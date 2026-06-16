@@ -1,11 +1,14 @@
 #pragma once
 
+#include <algorithm>
+#include <cassert>
 #include <limits>
 #include <memory>
 #include <unordered_set>
 #include <unordered_map>
 #include <set>
 #include <list>
+#include <vector>
 
 #include "dst/utils.hpp"
 #include "dst/tree.hpp"
@@ -163,6 +166,235 @@ namespace dst {
         tree->add_arc(std::make_pair(v, t), distances_t.at(t), trace_t->at(t), nullptr, true, true);
       }
       return tree;
+    }
+  };
+
+
+  class FenwickTree {
+    public:
+    std::vector<double> bit;
+    std::vector<double> values;
+
+    FenwickTree() {};
+
+    FenwickTree(int n) {
+      reset(n);
+    }
+
+    void reset(int n) {
+      bit.assign(n + 1, 0);
+      values.assign(n, 0);
+    }
+
+    int size() const {
+      return values.size();
+    }
+
+    double at(int idx) const {
+      assert(0 <= idx and idx < size());
+      return values[idx];
+    }
+
+    void add(int idx, double delta) {
+      assert(0 <= idx and idx < size());
+      values[idx] += delta;
+      for (int i = idx + 1; i < static_cast<int>(bit.size()); i += i & -i)
+        bit[i] += delta;
+    }
+
+    void set(int idx, double value) {
+      add(idx, value - at(idx));
+    }
+
+    double prefix_sum(int idx) const {
+      if (idx < 0 or size() == 0)
+        return 0;
+      if (idx >= size())
+        idx = size() - 1;
+
+      double sum = 0;
+      for (int i = idx + 1; i > 0; i -= i & -i)
+        sum += bit[i];
+      return sum;
+    }
+
+    double total_sum() const {
+      return prefix_sum(size() - 1);
+    }
+
+    int select_by_cumulative(double target) const {
+      if (target <= 0 or target > total_sum() + EPSILON)
+        return NONVERTEX;
+
+      int idx = 0;
+      double acc = 0;
+      int step = 1;
+      while ((step << 1) < static_cast<int>(bit.size()))
+        step <<= 1;
+
+      for (; step > 0; step >>= 1) {
+        int next = idx + step;
+        if (next < static_cast<int>(bit.size()) and acc + bit[next] < target) {
+          idx = next;
+          acc += bit[next];
+        }
+      }
+
+      return idx;
+    }
+  };
+
+
+  struct AdaptiveLevel2PrefixBound {
+    double density {std::numeric_limits<double>::max()};
+    int nterm {0};
+  };
+
+
+  class AdaptiveLevel2CenterIndex {
+    public:
+    int v {NONVERTEX};
+    std::vector<int> term_order;
+    std::vector<double> distances;
+    std::unordered_map<int, int> rank_of_term;
+    FenwickTree alive_counts;
+    FenwickTree alive_weights;
+
+    AdaptiveLevel2CenterIndex() {};
+
+    AdaptiveLevel2CenterIndex(int v, int max_terms) :
+        v {v}, alive_counts {max_terms}, alive_weights {max_terms} {};
+
+    void insert(int t, double d_vt) {
+      if (has_key(rank_of_term, t))
+        return;
+
+      int rank = term_order.size();
+      assert(rank < alive_counts.size());
+      term_order.push_back(t);
+      distances.push_back(d_vt);
+      rank_of_term[t] = rank;
+      alive_counts.add(rank, 1);
+      alive_weights.add(rank, d_vt);
+    }
+
+    void erase(const std::unordered_set<int> &terms_del) {
+      for (auto t: terms_del) {
+        if (not has_key(rank_of_term, t))
+          continue;
+
+        int rank = rank_of_term.at(t);
+        if (alive_counts.at(rank) <= 0)
+          continue;
+        alive_counts.add(rank, -1);
+        alive_weights.add(rank, -distances[rank]);
+      }
+    }
+
+    int alive_discovered_count() const {
+      return static_cast<int>(alive_counts.total_sum() + 0.5);
+    }
+
+    double alive_prefix_weight(int nterm) const {
+      if (nterm <= 0)
+        return 0;
+      int rank = alive_counts.select_by_cumulative(nterm);
+      if (rank == NONVERTEX)
+        return 0;
+      return alive_weights.prefix_sum(rank);
+    }
+
+    double threshold(int q) const {
+      int rank_next = alive_counts.select_by_cumulative(q + 1);
+      return q * distances[rank_next] - alive_prefix_weight(q);
+    }
+
+    int best_prefix_length(double d_rv) const {
+      int m = alive_discovered_count();
+      if (m <= 1)
+        return m;
+
+      int best_q = 0;
+      int left = 1, right = m - 1;
+      while (left <= right) {
+        int mid = left + (right - left) / 2;
+        if (leq(threshold(mid), d_rv)) {
+          best_q = mid;
+          left = mid + 1;
+        } else {
+          right = mid - 1;
+        }
+      }
+
+      return best_q + 1;
+    }
+
+    AdaptiveLevel2PrefixBound discovered_bound(double d_rv) const {
+      AdaptiveLevel2PrefixBound bound;
+      int nterm = best_prefix_length(d_rv);
+      if (nterm == 0)
+        return bound;
+
+      bound.nterm = nterm;
+      bound.density = (d_rv + alive_prefix_weight(nterm)) / nterm;
+      return bound;
+    }
+
+    AdaptiveLevel2PrefixBound optimistic_bound(
+        double d_rv,
+        int total_alive_terms,
+        double terminal_lb,
+        bool terminal_search_exhausted
+    ) const {
+      int m = alive_discovered_count();
+      int unknown = terminal_search_exhausted ? 0 : std::max(0, total_alive_terms - m);
+      if (m + unknown == 0)
+        return AdaptiveLevel2PrefixBound {};
+
+      auto threshold = [&] (int q) {
+        if (q < m) {
+          int rank_next = alive_counts.select_by_cumulative(q + 1);
+          return q * distances[rank_next] - alive_prefix_weight(q);
+        }
+        return m * terminal_lb - alive_weights.total_sum();
+      };
+
+      int total = m + unknown;
+      int best_q = 0;
+      int left = 1, right = total - 1;
+      while (left <= right) {
+        int mid = left + (right - left) / 2;
+        if (leq(threshold(mid), d_rv)) {
+          best_q = mid;
+          left = mid + 1;
+        } else {
+          right = mid - 1;
+        }
+      }
+
+      int nterm = best_q + 1;
+      AdaptiveLevel2PrefixBound bound;
+      bound.nterm = nterm;
+      bound.density = (
+          d_rv +
+          alive_prefix_weight(std::min(nterm, m)) +
+          std::max(0, nterm - m) * terminal_lb
+      ) / nterm;
+      return bound;
+    }
+
+    auto partree(int root, double d_rv) const {
+      auto par = std::make_shared<PartialTree> (root, v, d_rv);
+      int nterm = best_prefix_length(d_rv);
+      for (int i = 1; i <= nterm; i++) {
+        int rank = alive_counts.select_by_cumulative(i);
+        int t = term_order[rank];
+        double d_vt = distances[rank];
+        par->terms.insert(t);
+        par->distances_t[t] = d_vt;
+        par->cost_sc += d_vt;
+      }
+      return par;
     }
   };
 

@@ -74,6 +74,9 @@ The main experiment binary accepts `level1`, `adaptive_level1`, `level2`,
 `adaptive_level2` (also `root_adaptive_level2`), `adaptive_fast_level2`
 (also `root_adaptive_fast_level2`), `full_adaptive_level2`,
 `full_adaptive_fast_level2`, `fast_level2`, `level3`, and `fast_level3`.
+`adaptive_fast_level2` uses the dynamic-prefix root-adaptive implementation:
+terminal-side distances are discovered progressively and reused while each
+greedy iteration refreshes only the root-side distances.
 
 ## Tests
 
