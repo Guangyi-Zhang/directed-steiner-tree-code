@@ -10,6 +10,7 @@
 #include <string>
 #include <vector>
 #include <queue>
+#include <functional>
 #include <map>
 #include <set>
 #include <unordered_set>
@@ -613,30 +614,26 @@ namespace dst {
       double terminal_lb = 0;
       bool terminal_search_exhausted = false;
 
-      auto better_tree = [](
-          const std::shared_ptr<PartialTree> &a,
-          const std::shared_ptr<PartialTree> &b
+      auto better_prefix = [](
+          double a_density,
+          int a_nterm,
+          double b_density,
+          int b_nterm
       ) {
-        if (a == nullptr)
+        if (a_nterm == 0)
           return false;
-        if (b == nullptr)
+        if (b_nterm == 0)
           return true;
-        return a->density() < b->density() or
-               (eq(a->density(), b->density()) and
-                a->terms.size() > b->terms.size());
+        return a_density < b_density or
+               (eq(a_density, b_density) and a_nterm > b_nterm);
       };
 
-      auto better_bound = [](
-          const AdaptiveLevel2PrefixBound &a,
-          const std::shared_ptr<PartialTree> &b
+      auto bound_can_beat = [&](
+          const AdaptiveLevel2PrefixBound &bound,
+          double best_density,
+          int best_nterm
       ) {
-        if (a.nterm == 0)
-          return false;
-        if (b == nullptr)
-          return true;
-        return a.density < b->density() or
-               (eq(a.density, b->density()) and
-                static_cast<size_t>(a.nterm) > b->terms.size());
+        return better_prefix(bound.density, bound.nterm, best_density, best_nterm);
       };
 
       while (terms_left.size() > 0) {
@@ -645,41 +642,83 @@ namespace dst {
         root_sssp_nodes_visited += dists_r->size();
         par->trace_r = trace_r;
 
-        std::shared_ptr<PartialTree> best = nullptr;
-        while (true) {
-          best = nullptr;
-          bool certified = true;
-          for (auto &p: center_idxs) {
-            int v = p.first;
-            if (not has_key(*dists_r, v))
-              continue;
+        using BoundEntry = std::tuple<double,int,int,int>; // density, -nterm, v, version
+        std::priority_queue<BoundEntry, std::vector<BoundEntry>, std::greater<BoundEntry>> lower_bounds;
+        std::unordered_map<int, int> center_versions;
+        int best_v = NONVERTEX;
+        double best_density = std::numeric_limits<double>::max();
+        int best_nterm = 0;
 
-            auto tree_v = p.second.partree(root, dists_r->at(v));
-            if (tree_v->terms.size() > 0 and better_tree(tree_v, best))
-              best = tree_v;
+        auto push_lower_bound = [&] (int v) {
+          auto bound = center_idxs.at(v).optimistic_bound(
+              dists_r->at(v),
+              terms_left.size(),
+              terminal_lb,
+              terminal_search_exhausted
+          );
+          lower_bounds.emplace(bound.density, -bound.nterm, v, center_versions[v]);
+        };
+
+        auto refresh_center = [&] (int v) {
+          center_versions[v]++;
+          auto cand = center_idxs.at(v).discovered_bound(dists_r->at(v));
+          if (better_prefix(cand.density, cand.nterm, best_density, best_nterm)) {
+            best_v = v;
+            best_density = cand.density;
+            best_nterm = cand.nterm;
           }
+          push_lower_bound(v);
+        };
 
-          if (best != nullptr) {
-            for (auto &p: center_idxs) {
-              int v = p.first;
-              if (not has_key(*dists_r, v))
-                continue;
+        for (auto &p: center_idxs) {
+          int v = p.first;
+          if (not has_key(*dists_r, v))
+            continue;
+          center_versions[v] = 0;
+          auto cand = p.second.discovered_bound(dists_r->at(v));
+          if (better_prefix(cand.density, cand.nterm, best_density, best_nterm)) {
+            best_v = v;
+            best_density = cand.density;
+            best_nterm = cand.nterm;
+          }
+          push_lower_bound(v);
+        }
 
-              auto lower = p.second.optimistic_bound(
-                  dists_r->at(v),
-                  terms_left.size(),
-                  terminal_lb,
-                  terminal_search_exhausted
-              );
-              if (better_bound(lower, best)) {
-                certified = false;
-                break;
-              }
+        auto certified = [&] () {
+          if (best_v == NONVERTEX)
+            return false;
+
+          while (not lower_bounds.empty()) {
+            auto [density, neg_nterm, v, version] = lower_bounds.top();
+            if (version != center_versions.at(v)) {
+              lower_bounds.pop();
+              continue;
             }
 
-            if (certified)
-              break;
+            AdaptiveLevel2PrefixBound stale_bound {density, -neg_nterm};
+            if (not bound_can_beat(stale_bound, best_density, best_nterm))
+              return true;
+
+            lower_bounds.pop();
+            auto current = center_idxs.at(v).optimistic_bound(
+                dists_r->at(v),
+                terms_left.size(),
+                terminal_lb,
+                terminal_search_exhausted
+            );
+            if (bound_can_beat(current, best_density, best_nterm)) {
+              lower_bounds.emplace(current.density, -current.nterm, v, version);
+              return false;
+            }
+            lower_bounds.emplace(current.density, -current.nterm, v, version);
           }
+
+          return true;
+        };
+
+        while (true) {
+          if (certified())
+            break;
 
           if (terminal_search_exhausted)
             break;
@@ -692,10 +731,15 @@ namespace dst {
           }
 
           terminal_lb = d_vt;
-          if (has_key(center_idxs, v))
+          if (has_key(center_idxs, v) and has_key(*dists_r, v)) {
             center_idxs.at(v).insert(t, d_vt);
+            refresh_center(v);
+          }
         }
 
+        auto best = best_v == NONVERTEX?
+            std::shared_ptr<PartialTree> {nullptr} :
+            center_idxs.at(best_v).partree(root, dists_r->at(best_v));
         if (best == nullptr or best->terms.size() == 0)
           break;
 
