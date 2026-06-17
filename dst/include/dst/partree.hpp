@@ -170,10 +170,11 @@ namespace dst {
   };
 
 
+  // Binary indexed tree (BIT): O(log n) point add and prefix sum over a fixed-size array.
   class FenwickTree {
     public:
-    std::vector<double> bit;
-    std::vector<double> values;
+    std::vector<double> bit;     // internal sums with 1-indexed position
+    std::vector<double> values;  // current value at each 0-indexed position
 
     FenwickTree() {};
 
@@ -195,9 +196,15 @@ namespace dst {
       return values[idx];
     }
 
+    // Add delta to values[idx] and propagate into bit.
     void add(int idx, double delta) {
       assert(0 <= idx and idx < size());
       values[idx] += delta;
+      // bit[i] (1-indexed) holds the sum of the last (i & -i) elements ending at i.
+      // i & -i is 2^k (lowest set bit), so each hop is a power-of-two jump; binary carry
+      // clears low bits and bumps the next, giving at most O(log n) nodes.
+      // bit[i] == values[i-1] only when i is odd (block length 1); at i = 2^k it sums 2^k
+      // elements ending at i; other i sum intermediate-sized blocks (e.g. i=6 → values[4..5]).
       for (int i = idx + 1; i < static_cast<int>(bit.size()); i += i & -i)
         bit[i] += delta;
     }
@@ -206,6 +213,7 @@ namespace dst {
       add(idx, value - at(idx));
     }
 
+    // Sum of values[0..idx].
     double prefix_sum(int idx) const {
       if (idx < 0 or size() == 0)
         return 0;
@@ -213,6 +221,11 @@ namespace dst {
         idx = size() - 1;
 
       double sum = 0;
+      // Prefix values[0..idx] = 1-indexed positions [1..idx+1]. Walk right-to-left,
+      // peeling off disjoint power-of-two blocks: bit[i] is the sum of the last (i & -i)
+      // elements ending at i (the rightmost chunk not yet counted). i -= i & -i skips
+      // past that chunk; the chunks partition [1..idx+1] exactly, so we never double-count.
+      // e.g. idx=4 → i=5 adds [5], i=4 adds [1..4].
       for (int i = idx + 1; i > 0; i -= i & -i)
         sum += bit[i];
       return sum;
@@ -222,16 +235,25 @@ namespace dst {
       return prefix_sum(size() - 1);
     }
 
+    // Smallest index whose prefix sum is >= target (0-indexed rank).
     int select_by_cumulative(double target) const {
       if (target <= 0 or target > total_sum() + EPSILON)
         return NONVERTEX;
 
-      int idx = 0;
-      double acc = 0;
+      // Largest power-of-two jump that still fits in bit[].
       int step = 1;
       while ((step << 1) < static_cast<int>(bit.size()))
         step <<= 1;
 
+      // Find smallest 0-indexed rank r with prefix_sum(r) >= target (inverse of prefix_sum).
+      // Same Fenwick blocks, assembled left-to-right: at each step size, try extending idx
+      // by step via bit[idx+step] (sum of the next step elements in block order). Commit
+      // the jump if acc + bit[idx+step] < target (k-th item not reached yet); otherwise
+      // skip and halve step to search inside the block where target falls.
+      // e.g. counts [0,0,1,0,0,1,0,0], target=2: step=4, idx=0 → 0+bit[4]=1 < 2, commit;
+      // step=2, idx=4 → 1+bit[6]=2 >= 2, skip and refine with smaller step.
+      int idx = 0;
+      double acc = 0;
       for (; step > 0; step >>= 1) {
         int next = idx + step;
         if (next < static_cast<int>(bit.size()) and acc + bit[next] < target) {
@@ -251,20 +273,23 @@ namespace dst {
   };
 
 
+  // Per-center index for adaptive level-2: terminals in fixed nondecreasing d(v,t)
+  // order, with dynamic alive/covered status via two Fenwick trees.
   class AdaptiveLevel2CenterIndex {
     public:
     int v {NONVERTEX};
-    std::vector<int> term_order;
-    std::vector<double> distances;
-    std::unordered_map<int, int> rank_of_term;
-    FenwickTree alive_counts;
-    FenwickTree alive_weights;
+    std::vector<int> term_order;              // rank -> terminal id
+    std::vector<double> distances;            // rank -> fixed d(v, t)
+    std::unordered_map<int, int> rank_of_term; // terminal -> rank
+    FenwickTree alive_counts;  // 1 per alive terminal, 0 if covered
+    FenwickTree alive_weights; // d(v,t) per alive terminal, 0 if covered
 
     AdaptiveLevel2CenterIndex() {};
 
     AdaptiveLevel2CenterIndex(int v, int max_terms) :
         v {v}, alive_counts {max_terms}, alive_weights {max_terms} {};
 
+    // Append a newly discovered terminal at the next rank (nondecreasing d(v,t)).
     void insert(int t, double d_vt) {
       if (has_key(rank_of_term, t))
         return;
@@ -278,6 +303,7 @@ namespace dst {
       alive_weights.add(rank, d_vt);
     }
 
+    // Mark covered terminals dead in both Fenwick trees (values stay at rank).
     void erase(const std::unordered_set<int> &terms_del) {
       for (auto t: terms_del) {
         if (not has_key(rank_of_term, t))
@@ -295,6 +321,7 @@ namespace dst {
       return static_cast<int>(alive_counts.total_sum() + 0.5);
     }
 
+    // Weight sum of the first nterm alive terminals in fixed rank order.
     double alive_prefix_weight(int nterm) const {
       if (nterm <= 0)
         return 0;
@@ -304,11 +331,13 @@ namespace dst {
       return alive_weights.prefix_sum(rank);
     }
 
+    // Paper threshold theta_v(q) = q * w_v(q+1) - P_v(q), using alive-prefix ranks.
     double threshold(int q) const {
       int rank_next = alive_counts.select_by_cumulative(q + 1);
       return q * distances[rank_next] - alive_prefix_weight(q);
     }
 
+    // Largest prefix length j = 1 + q with theta_v(q) <= d_rv over discovered alive terms.
     int best_prefix_length(double d_rv) const {
       int m = alive_discovered_count();
       if (m <= 1)
@@ -329,6 +358,7 @@ namespace dst {
       return best_q + 1;
     }
 
+    // Density bound using only discovered alive terminals.
     AdaptiveLevel2PrefixBound discovered_bound(double d_rv) const {
       AdaptiveLevel2PrefixBound bound;
       int nterm = best_prefix_length(d_rv);
@@ -340,6 +370,7 @@ namespace dst {
       return bound;
     }
 
+    // Density bound that may include undiscovered terminals at terminal_lb each.
     AdaptiveLevel2PrefixBound optimistic_bound(
         double d_rv,
         int total_alive_terms,
@@ -383,6 +414,7 @@ namespace dst {
       return bound;
     }
 
+    // Build PartialTree(root, v, d_rv) with the best discovered alive prefix.
     auto partree(int root, double d_rv) const {
       auto par = std::make_shared<PartialTree> (root, v, d_rv);
       int nterm = best_prefix_length(d_rv);
