@@ -57,6 +57,63 @@ TEST_CASE("sssp_nodes_visited") {
 }
 
 
+TEST_CASE("FenwickTree prefix sums and point updates") {
+  using namespace dst;
+
+  FenwickTree fw {6};
+  CHECK(fw.size() == 6);
+  CHECK(eq(fw.total_sum(), 0));
+  CHECK(eq(fw.prefix_sum(0), 0));
+
+  fw.add(0, 2);
+  fw.add(2, 3.5);
+  fw.add(5, 4);
+
+  CHECK(eq(fw.at(0), 2));
+  CHECK(eq(fw.at(2), 3.5));
+  CHECK(eq(fw.prefix_sum(0), 2));
+  CHECK(eq(fw.prefix_sum(1), 2));
+  CHECK(eq(fw.prefix_sum(2), 5.5));
+  CHECK(eq(fw.prefix_sum(5), 9.5));
+  CHECK(eq(fw.total_sum(), 9.5));
+
+  fw.set(2, 1.5);
+  fw.add(4, 0.25);
+
+  CHECK(eq(fw.at(2), 1.5));
+  CHECK(eq(fw.prefix_sum(2), 3.5));
+  CHECK(eq(fw.prefix_sum(4), 3.75));
+  CHECK(eq(fw.total_sum(), 7.75));
+}
+
+
+TEST_CASE("FenwickTree select by cumulative count") {
+  using namespace dst;
+
+  FenwickTree counts {7};
+  counts.add(1, 1);
+  counts.add(3, 1);
+  counts.add(4, 1);
+  counts.add(6, 1);
+
+  CHECK(eq(counts.total_sum(), 4));
+  CHECK(counts.select_by_cumulative(0) == NONVERTEX);
+  CHECK(counts.select_by_cumulative(1) == 1);
+  CHECK(counts.select_by_cumulative(2) == 3);
+  CHECK(counts.select_by_cumulative(3) == 4);
+  CHECK(counts.select_by_cumulative(4) == 6);
+  CHECK(counts.select_by_cumulative(5) == NONVERTEX);
+
+  counts.add(3, -1);
+  counts.set(6, 0);
+
+  CHECK(eq(counts.total_sum(), 2));
+  CHECK(counts.select_by_cumulative(1) == 1);
+  CHECK(counts.select_by_cumulative(2) == 4);
+  CHECK(counts.select_by_cumulative(3) == NONVERTEX);
+}
+
+
 TEST_CASE("PartialTree3") {
   // test zero_drv()
   using namespace dst;
