@@ -599,21 +599,27 @@ namespace dst {
     }
 
 
+    // Root-adaptive fast level-2: fixed terminal-side distances, dynamic root-side
+    // distances. One persistent backward CoordinatedDijkstra; per-center Fenwick
+    // indexes maintain best terminal prefixes as discoveries arrive.
     auto adaptive_fast_level2_alg() {
       auto par = std::make_shared<PartialTreeManager> (root);
       par->trace_t = nullptr;
       std::unordered_set<int> terms_left(terms_dm.begin(), terms_dm.end());
+      // One index per center v: terminals inserted in nondecreasing d(v,t) order.
       std::unordered_map<int, AdaptiveLevel2CenterIndex> center_idxs;
       for (auto v: V) {
         center_idxs.emplace(v, AdaptiveLevel2CenterIndex(v, terms_dm.size()));
       }
 
+      // Terminal-side search runs once for the whole algorithm run.
       CoordinatedDijkstra cosssp {adj_r, w, terms_dm, true};
       par->trace_t = cosssp.trace_t;
       int root_sssp_nodes_visited = 0;
-      double terminal_lb = 0;
+      double terminal_lb = 0; // frontier distance from cosssp; lower-bounds undiscovered d(v,t)
       bool terminal_search_exhausted = false;
 
+      // Function: prefer lower density; tie-break by covering more terminals.
       auto better_prefix = [](
           double a_density,
           int a_nterm,
@@ -637,88 +643,64 @@ namespace dst {
       };
 
       while (terms_left.size() > 0) {
+        // Root-side residual distances from vertices already in the partial tree.
         auto sources = tree_vertices(par->totree);
         auto [dists_r, trace_r] = dijkstra_multisource(adj, w, sources);
         root_sssp_nodes_visited += dists_r->size();
         par->trace_r = trace_r;
 
-        using BoundEntry = std::tuple<double,int,int,int>; // density, -nterm, v, version
-        std::priority_queue<BoundEntry, std::vector<BoundEntry>, std::greater<BoundEntry>> lower_bounds;
-        std::unordered_map<int, int> center_versions;
+        // Survivor list of still-possible centers for this greedy iteration.
+        std::list<int> survivors;
+        std::unordered_set<int> survivors_set;
         int best_v = NONVERTEX;
         double best_density = std::numeric_limits<double>::max();
         int best_nterm = 0;
 
-        auto push_lower_bound = [&] (int v) {
-          auto bound = center_idxs.at(v).optimistic_bound(
-              dists_r->at(v),
-              terms_left.size(),
-              terminal_lb,
-              terminal_search_exhausted
-          );
-          lower_bounds.emplace(bound.density, -bound.nterm, v, center_versions[v]);
-        };
-
         auto refresh_center = [&] (int v) {
-          center_versions[v]++;
           auto cand = center_idxs.at(v).discovered_bound(dists_r->at(v));
           if (better_prefix(cand.density, cand.nterm, best_density, best_nterm)) {
             best_v = v;
             best_density = cand.density;
             best_nterm = cand.nterm;
           }
-          push_lower_bound(v);
         };
 
+        // Initialize the survivors list and the best center
         for (auto &p: center_idxs) {
           int v = p.first;
           if (not has_key(*dists_r, v))
             continue;
-          center_versions[v] = 0;
+          survivors.push_back(v);
+          survivors_set.insert(v);
           auto cand = p.second.discovered_bound(dists_r->at(v));
           if (better_prefix(cand.density, cand.nterm, best_density, best_nterm)) {
             best_v = v;
             best_density = cand.density;
             best_nterm = cand.nterm;
           }
-          push_lower_bound(v);
         }
 
-        auto certified = [&] () {
-          if (best_v == NONVERTEX)
-            return false;
-
-          while (not lower_bounds.empty()) {
-            auto [density, neg_nterm, v, version] = lower_bounds.top();
-            if (version != center_versions.at(v)) {
-              lower_bounds.pop();
-              continue;
-            }
-
-            AdaptiveLevel2PrefixBound stale_bound {density, -neg_nterm};
-            if (not bound_can_beat(stale_bound, best_density, best_nterm))
-              return true;
-
-            lower_bounds.pop();
-            auto current = center_idxs.at(v).optimistic_bound(
-                dists_r->at(v),
-                terms_left.size(),
-                terminal_lb,
-                terminal_search_exhausted
-            );
-            if (bound_can_beat(current, best_density, best_nterm)) {
-              lower_bounds.emplace(current.density, -current.nterm, v, version);
-              return false;
-            }
-            lower_bounds.emplace(current.density, -current.nterm, v, version);
-          }
-
-          return true;
-        };
-
+        // Advance terminal-side search until the best prefix is certified.
         while (true) {
-          if (certified())
-            break;
+          if (best_nterm > 0) {
+            while (not survivors.empty()) {
+              int v = survivors.front();
+              auto bound = center_idxs.at(v).optimistic_bound(
+                  dists_r->at(v),
+                  terms_left.size(),
+                  terminal_lb,
+                  terminal_search_exhausted
+              );
+              if (bound_can_beat(bound, best_density, best_nterm))
+                break; // not yet certified
+
+              survivors_set.erase(v);
+              survivors.pop_front();
+            }
+
+            if (survivors.empty())
+              break; // no survivors, certified
+          }
 
           if (terminal_search_exhausted)
             break;
@@ -733,7 +715,8 @@ namespace dst {
           terminal_lb = d_vt;
           if (has_key(center_idxs, v) and has_key(*dists_r, v)) {
             center_idxs.at(v).insert(t, d_vt);
-            refresh_center(v);
+            if (has_key(survivors_set, v)) // v is still a survivor
+              refresh_center(v);
           }
         }
 
@@ -743,6 +726,7 @@ namespace dst {
         if (best == nullptr or best->terms.size() == 0)
           break;
 
+        // Remove covered terminals from the persistent search and all indexes.
         for (auto t: best->terms) {
           terms_left.erase(t);
           cosssp.delete_source(t);
