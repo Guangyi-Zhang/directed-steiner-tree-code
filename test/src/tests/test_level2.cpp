@@ -114,6 +114,69 @@ TEST_CASE("FenwickTree select by cumulative count") {
 }
 
 
+TEST_CASE("AdaptiveLevel2CenterIndex builds threshold prefix and erases") {
+  using namespace dst;
+
+  AdaptiveLevel2CenterIndex idx {7, 4};
+  idx.insert(101, 1);
+  idx.insert(102, 2);
+  idx.insert(103, 4);
+  idx.insert(102, 2); // duplicate discoveries are ignored
+
+  CHECK(idx.alive_discovered_count() == 3);
+  CHECK(idx.best_prefix_length(1) == 2);
+
+  auto bound = idx.discovered_bound(1);
+  CHECK(bound.nterm == 2);
+  CHECK(eq(bound.density, 2));
+
+  auto tree = idx.partree(0, 1);
+  CHECK(tree->v == 7);
+  CHECK(eq(tree->cost_sc, 4));
+  CHECK((tree->terms == std::unordered_set<int> {101, 102}));
+  CHECK(eq(tree->distances_t.at(101), 1));
+  CHECK(eq(tree->distances_t.at(102), 2));
+
+  idx.erase({101, 999});
+  CHECK(idx.alive_discovered_count() == 2);
+  CHECK(idx.best_prefix_length(1) == 1);
+
+  tree = idx.partree(0, 1);
+  CHECK(eq(tree->cost_sc, 3));
+  CHECK((tree->terms == std::unordered_set<int> {102}));
+
+  CHECK(idx.best_prefix_length(10) == 2);
+  tree = idx.partree(0, 10);
+  CHECK(eq(tree->cost_sc, 16));
+  CHECK((tree->terms == std::unordered_set<int> {102, 103}));
+}
+
+
+TEST_CASE("AdaptiveLevel2CenterIndex optimistic bound handles undiscovered tail") {
+  using namespace dst;
+
+  AdaptiveLevel2CenterIndex idx {5, 3};
+  idx.insert(201, 2);
+
+  auto discovered = idx.discovered_bound(10);
+  CHECK(discovered.nterm == 1);
+  CHECK(eq(discovered.density, 12));
+
+  auto optimistic = idx.optimistic_bound(10, 3, 3, false);
+  CHECK(optimistic.nterm == 3);
+  CHECK(eq(optimistic.density, 6));
+
+  auto exhausted = idx.optimistic_bound(10, 3, 3, true);
+  CHECK(exhausted.nterm == 1);
+  CHECK(eq(exhausted.density, 12));
+
+  AdaptiveLevel2CenterIndex empty {6, 2};
+  optimistic = empty.optimistic_bound(5, 2, 3, false);
+  CHECK(optimistic.nterm == 2);
+  CHECK(eq(optimistic.density, 5.5));
+}
+
+
 TEST_CASE("PartialTree3") {
   // test zero_drv()
   using namespace dst;
