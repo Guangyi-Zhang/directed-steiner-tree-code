@@ -173,7 +173,7 @@ namespace dst {
         center_idxs.emplace(
           std::piecewise_construct,
           std::forward_as_tuple(v),
-          std::forward_as_tuple(root, v, dists_r->at(v), static_cast<int>(terms_dm.size()))
+          std::forward_as_tuple(root, v, dists_r->at(v))
         );
         LBs.push_back(v);
       }

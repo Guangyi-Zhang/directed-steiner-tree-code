@@ -564,7 +564,7 @@ TEST_CASE("Level2CenterIndex Cheap mode matches PartialTree density_LB") {
   using namespace dst;
   int k = 5;
 
-  Level2CenterIndex idx(0, 1, 1.0, k);
+  Level2CenterIndex idx(0, 1, 1.0);
   idx.add_term(11, 1);
   idx.add_term(12, 2);
 
@@ -579,22 +579,23 @@ TEST_CASE("Level2CenterIndex Cheap mode matches PartialTree density_LB") {
 }
 
 
-TEST_CASE("Level2CenterIndex Threshold mode uses binary search") {
+TEST_CASE("Level2CenterIndex Threshold mode returns best prefix") {
   using namespace dst;
-  Level2CenterIndex idx(0, 1, 1.0, 4);
+  Level2CenterIndex idx(0, 1, 1.0);
   idx.add_term(101, 1);
   idx.add_term(102, 2);
   idx.add_term(103, 4);
 
+  // After adding 103, tree becomes ready with prefix {101,102}, cost_sc=4.
   auto bound = idx.optimistic_bound(1.0, 3, 0, true, Level2BoundMode::Threshold);
   CHECK(bound.nterm == 2);
   CHECK(eq(bound.density, 2.0));
 }
 
 
-TEST_CASE("Level2CenterIndex erase_and_reset preserves sorted resume") {
+TEST_CASE("Level2CenterIndex erase_and_reset preserves resume") {
   using namespace dst;
-  Level2CenterIndex idx(0, 1, 1.0, 5);
+  Level2CenterIndex idx(0, 1, 1.0);
   idx.add_term(11, 1);
   idx.add_term(12, 2);
   idx.add_term(13, 4);
@@ -602,7 +603,6 @@ TEST_CASE("Level2CenterIndex erase_and_reset preserves sorted resume") {
 
   idx.erase_and_reset({11});
   CHECK(idx.tree.terms.count(12) == 1);
-  CHECK(idx.alive_discovered_count() == 2);
 
   auto lb_cheap = idx.optimistic_bound(1.0, 4, 1.0, false, Level2BoundMode::Cheap);
   auto lb_thr = idx.optimistic_bound(1.0, 4, 1.0, false, Level2BoundMode::Threshold);
@@ -611,25 +611,53 @@ TEST_CASE("Level2CenterIndex erase_and_reset preserves sorted resume") {
 }
 
 
-TEST_CASE("Level2CenterIndex zero_drv preserves Fenwick state") {
+TEST_CASE("Level2CenterIndex zero_drv preserves threshold state") {
   using namespace dst;
-  Level2CenterIndex idx(0, 1, 5.0, 4);
+  Level2CenterIndex idx(0, 1, 5.0);
   idx.add_term(11, 1);
   idx.add_term(12, 2);
 
-  CHECK(idx.alive_discovered_count() == 2);
   idx.zero_drv();
-  CHECK(idx.alive_discovered_count() == 2);
 
-  // After zero_drv, d_rv=0. Threshold theta(1) = 1*2 - 1 = 1 > 0, so nterm=1.
+  // After zero_drv with d_rv=5: cost_sc resets to 0 and re-adds terminals.
+  // Re-add 11 (d=1): cost_sc=1, density=1. Re-add 12 (d=2): new_den=1.5 > 1,
+  // so tree becomes ready with prefix {11}, cost_sc=1.
   auto bound = idx.optimistic_bound(0.0, 2, 0, true, Level2BoundMode::Threshold);
   CHECK(bound.nterm == 1);
   CHECK(eq(bound.density, 1.0));
 
-  // With larger d_rv, can include both: theta(1) = 1 <= 1, so nterm=2.
+  // Same result regardless of d_rv parameter (d_rv is baked into cost_sc).
   auto bound2 = idx.optimistic_bound(1.0, 2, 0, true, Level2BoundMode::Threshold);
-  CHECK(bound2.nterm == 2);
-  CHECK(eq(bound2.density, (1.0 + 1.0 + 2.0) / 2));
+  CHECK(bound2.nterm == 1);
+  CHECK(eq(bound2.density, 1.0));
+}
+
+
+TEST_CASE("Level2CenterIndex Threshold chooses current prefix when tail expensive") {
+  using namespace dst;
+  Level2CenterIndex idx(0, 1, 1.0);
+  idx.add_term(11, 1);
+  // Not ready, m=1, cost_sc=2. k=3, terminal_lb=10.
+  // current prefix density = 2/1 = 2
+  // full tail density = (2 + 2*10)/3 = 22/3 ≈ 7.33
+  // m*lb = 10 > C = 2, so current prefix wins.
+  auto bound = idx.optimistic_bound(1.0, 3, 10, false, Level2BoundMode::Threshold);
+  CHECK(bound.nterm == 1);
+  CHECK(eq(bound.density, 2.0));
+}
+
+
+TEST_CASE("Level2CenterIndex Threshold chooses full tail when tail cheap") {
+  using namespace dst;
+  Level2CenterIndex idx(0, 1, 5.0);
+  idx.add_term(11, 1);
+  // Not ready, m=1, cost_sc=6. k=3, terminal_lb=1.
+  // current prefix density = 6/1 = 6
+  // full tail density = (6 + 2*1)/3 = 8/3 ≈ 2.67
+  // m*lb = 1 <= C = 6, so full tail wins.
+  auto bound = idx.optimistic_bound(5.0, 3, 1, false, Level2BoundMode::Threshold);
+  CHECK(bound.nterm == 3);
+  CHECK(eq(bound.density, 8.0 / 3));
 }
 
 
