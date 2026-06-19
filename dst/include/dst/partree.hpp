@@ -310,7 +310,7 @@ namespace dst {
           continue;
 
         int rank = rank_of_term.at(t);
-        if (alive_counts.at(rank) <= 0)
+        if (alive_counts.at(rank) <= 0.5) // floating point comparison
           continue;
         alive_counts.add(rank, -1);
         alive_weights.add(rank, -distances[rank]);
@@ -318,7 +318,7 @@ namespace dst {
     }
 
     int alive_discovered_count() const {
-      return static_cast<int>(alive_counts.total_sum() + 0.5);
+      return static_cast<int>(alive_counts.total_sum() + 0.5); // floating point rounding
     }
 
     // Weight sum of the first nterm alive terminals in fixed rank order.
@@ -370,19 +370,34 @@ namespace dst {
       return bound;
     }
 
-    // Density bound that may include undiscovered terminals at terminal_lb each.
+    // Optimistic density lower bound for this center.
+    //
+    // Discovered alive terminals have exact d(v,t) values in rank order. Any
+    // undiscovered alive terminal has not been popped from the global
+    // CoordinatedDijkstra frontier yet, so its d(v,t) is at least terminal_lb.
+    // For certification we ask: even if every undiscovered alive terminal were
+    // exactly terminal_lb, what is the best prefix density this center could
+    // still achieve? If that optimistic density cannot beat the current best,
+    // this center is safe to discard for the current greedy iteration.
     AdaptiveLevel2PrefixBound optimistic_bound(
         double d_rv,
         int total_alive_terms,
         double terminal_lb,
         bool terminal_search_exhausted
     ) const {
+      // Once terminal search is exhausted there is no unknown tail; otherwise
+      // total_alive_terms - m terminals may still appear after the discovered
+      // prefix, all with lower-bound weight terminal_lb.
       int m = alive_discovered_count();
       int unknown = terminal_search_exhausted ? 0 : std::max(0, total_alive_terms - m);
       if (m + unknown == 0)
         return AdaptiveLevel2PrefixBound {};
 
-      auto threshold = [&] (int q) {
+      // Reuse the same threshold rule as the exact discovered query. For q < m,
+      // the next terminal is known exactly. For q >= m, the next terminal is an
+      // optimistic unknown with weight terminal_lb, so all thresholds in the
+      // unknown tail collapse to m * terminal_lb - sum(discovered weights).
+      auto _threshold = [&] (int q) {
         if (q < m) {
           int rank_next = alive_counts.select_by_cumulative(q + 1);
           return q * distances[rank_next] - alive_prefix_weight(q);
@@ -390,12 +405,15 @@ namespace dst {
         return m * terminal_lb - alive_weights.total_sum();
       };
 
+      // The threshold sequence is monotone after appending the constant
+      // lower-bound tail, so binary search still finds the largest q where
+      // adding the (q+1)-th terminal does not increase density.
       int total = m + unknown;
       int best_q = 0;
       int left = 1, right = total - 1;
       while (left <= right) {
         int mid = left + (right - left) / 2;
-        if (leq(threshold(mid), d_rv)) {
+        if (leq(_threshold(mid), d_rv)) {
           best_q = mid;
           left = mid + 1;
         } else {
@@ -406,6 +424,7 @@ namespace dst {
       int nterm = best_q + 1;
       AdaptiveLevel2PrefixBound bound;
       bound.nterm = nterm;
+      // Exact discovered prefix weight plus the optimistic unknown tail weight.
       bound.density = (
           d_rv +
           alive_prefix_weight(std::min(nterm, m)) +
