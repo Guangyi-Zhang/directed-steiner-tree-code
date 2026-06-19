@@ -16,6 +16,35 @@
 
 namespace dst {
 
+  enum class Level2BoundMode { Cheap, Threshold };
+
+  struct Level2PrefixBound {
+    double density {std::numeric_limits<double>::max()};
+    int nterm {0};
+  };
+
+  inline double level2_threshold(int q, double next_weight, double prefix_weight) {
+    return q * next_weight - prefix_weight;
+  }
+
+  template <class ThresholdFn>
+  int best_level2_prefix_length(int total_terms, double d_rv, ThresholdFn threshold) {
+    if (total_terms <= 1)
+      return total_terms;
+    int best_q = 0;
+    int left = 1, right = total_terms - 1;
+    while (left <= right) {
+      int mid = left + (right - left) / 2;
+      if (leq(threshold(mid), d_rv)) {
+        best_q = mid;
+        left = mid + 1;
+      } else {
+        right = mid - 1;
+      }
+    }
+    return best_q + 1;
+  }
+
   class BasePartialTree {
     public:
     int root {NONVERTEX}; 
@@ -267,9 +296,114 @@ namespace dst {
   };
 
 
-  struct AdaptiveLevel2PrefixBound {
-    double density {std::numeric_limits<double>::max()};
-    int nterm {0};
+  // Per-center index for fast level-2: wraps PartialTree with optional Fenwick-backed
+  // threshold mode. Terminals arrive in nondecreasing d(v,t) order from
+  // CoordinatedDijkstra, so the Fenwick trees are populated incrementally.
+  class Level2CenterIndex {
+    public:
+    PartialTree tree;
+
+    std::vector<int> term_order;
+    std::vector<double> sorted_dists;
+    std::unordered_map<int, int> rank_of_term;
+    FenwickTree alive_counts;
+    FenwickTree alive_weights;
+
+    Level2CenterIndex() {};
+
+    Level2CenterIndex(int r, int v, double d_rv, int max_terms) :
+        tree {r, v, d_rv}, alive_counts {max_terms}, alive_weights {max_terms} {};
+
+    void add_term(int t, double d_vt) {
+      tree.add_term(t, d_vt);
+      if (has_key(rank_of_term, t))
+        return;
+      int rank = term_order.size();
+      assert(rank < alive_counts.size());
+      term_order.push_back(t);
+      sorted_dists.push_back(d_vt);
+      rank_of_term[t] = rank;
+      alive_counts.add(rank, 1);
+      alive_weights.add(rank, d_vt);
+    }
+
+    void erase_and_reset(const std::unordered_set<int> &terms_del) {
+      tree.erase_and_reset(terms_del);
+      for (auto t: terms_del) {
+        if (not has_key(rank_of_term, t))
+          continue;
+        int rank = rank_of_term.at(t);
+        if (alive_counts.at(rank) <= 0.5)
+          continue;
+        alive_counts.add(rank, -1);
+        alive_weights.add(rank, -sorted_dists[rank]);
+      }
+    }
+
+    void zero_drv() {
+      tree.zero_drv();
+    }
+
+    double density() { return tree.density(); }
+    bool is_ready(double d_LB = -1) { return tree.is_ready(d_LB); }
+
+    int alive_discovered_count() const {
+      return static_cast<int>(alive_counts.total_sum() + 0.5);
+    }
+
+    double alive_prefix_weight(int nterm) const {
+      if (nterm <= 0)
+        return 0;
+      int rank = alive_counts.select_by_cumulative(nterm);
+      if (rank == NONVERTEX)
+        return 0;
+      return alive_weights.prefix_sum(rank);
+    }
+
+    Level2PrefixBound optimistic_bound(
+        double d_rv,
+        int total_alive_terms,
+        double terminal_lb,
+        bool terminal_search_exhausted,
+        Level2BoundMode mode
+    ) const {
+      if (mode == Level2BoundMode::Cheap) {
+        Level2PrefixBound bound;
+        if (tree.ready) {
+          bound.density = tree.cost_sc / tree.terms.size();
+          bound.nterm = tree.terms.size();
+        } else {
+          bound.density = (tree.cost_sc + (total_alive_terms - (int)tree.terms.size()) * terminal_lb) / total_alive_terms;
+          bound.nterm = total_alive_terms;
+        }
+        return bound;
+      }
+
+      int m = alive_discovered_count();
+      int unknown = terminal_search_exhausted ? 0 : std::max(0, total_alive_terms - m);
+      if (m + unknown == 0)
+        return Level2PrefixBound {};
+
+      auto _threshold = [&](int q) -> double {
+        if (q < m) {
+          int rank_next = alive_counts.select_by_cumulative(q + 1);
+          return level2_threshold(q, sorted_dists[rank_next], alive_prefix_weight(q));
+        }
+        return level2_threshold(m, terminal_lb, alive_weights.total_sum());
+      };
+
+      int total = m + unknown;
+      int nterm = best_level2_prefix_length(total, d_rv, _threshold);
+
+      Level2PrefixBound bound;
+      bound.nterm = nterm;
+      bound.density = (
+          d_rv +
+          alive_prefix_weight(std::min(nterm, m)) +
+          std::max(0, nterm - m) * terminal_lb
+      ) / nterm;
+      return bound;
+    }
   };
 
 
@@ -331,36 +465,20 @@ namespace dst {
       return alive_weights.prefix_sum(rank);
     }
 
-    // Paper threshold theta_v(q) = q * w_v(q+1) - P_v(q), using alive-prefix ranks.
     double threshold(int q) const {
       int rank_next = alive_counts.select_by_cumulative(q + 1);
-      return q * distances[rank_next] - alive_prefix_weight(q);
+      return level2_threshold(q, distances[rank_next], alive_prefix_weight(q));
     }
 
-    // Largest prefix length j = 1 + q with theta_v(q) <= d_rv over discovered alive terms.
     int best_prefix_length(double d_rv) const {
       int m = alive_discovered_count();
-      if (m <= 1)
-        return m;
-
-      int best_q = 0;
-      int left = 1, right = m - 1;
-      while (left <= right) {
-        int mid = left + (right - left) / 2;
-        if (leq(threshold(mid), d_rv)) {
-          best_q = mid;
-          left = mid + 1;
-        } else {
-          right = mid - 1;
-        }
-      }
-
-      return best_q + 1;
+      auto _threshold = [&](int q) -> double { return threshold(q); };
+      return best_level2_prefix_length(m, d_rv, _threshold);
     }
 
     // Density bound using only discovered alive terminals.
-    AdaptiveLevel2PrefixBound discovered_bound(double d_rv) const {
-      AdaptiveLevel2PrefixBound bound;
+    Level2PrefixBound discovered_bound(double d_rv) const {
+      Level2PrefixBound bound;
       int nterm = best_prefix_length(d_rv);
       if (nterm == 0)
         return bound;
@@ -379,52 +497,38 @@ namespace dst {
     // exactly terminal_lb, what is the best prefix density this center could
     // still achieve? If that optimistic density cannot beat the current best,
     // this center is safe to discard for the current greedy iteration.
-    AdaptiveLevel2PrefixBound optimistic_bound(
+    Level2PrefixBound optimistic_bound(
         double d_rv,
         int total_alive_terms,
         double terminal_lb,
-        bool terminal_search_exhausted
+        bool terminal_search_exhausted,
+        Level2BoundMode mode = Level2BoundMode::Threshold
     ) const {
-      // Once terminal search is exhausted there is no unknown tail; otherwise
-      // total_alive_terms - m terminals may still appear after the discovered
-      // prefix, all with lower-bound weight terminal_lb.
       int m = alive_discovered_count();
       int unknown = terminal_search_exhausted ? 0 : std::max(0, total_alive_terms - m);
-      if (m + unknown == 0)
-        return AdaptiveLevel2PrefixBound {};
-
-      // Reuse the same threshold rule as the exact discovered query. For q < m,
-      // the next terminal is known exactly. For q >= m, the next terminal is an
-      // optimistic unknown with weight terminal_lb, so all thresholds in the
-      // unknown tail collapse to m * terminal_lb - sum(discovered weights).
-      auto _threshold = [&] (int q) {
-        if (q < m) {
-          int rank_next = alive_counts.select_by_cumulative(q + 1);
-          return q * distances[rank_next] - alive_prefix_weight(q);
-        }
-        return m * terminal_lb - alive_weights.total_sum();
-      };
-
-      // The threshold sequence is monotone after appending the constant
-      // lower-bound tail, so binary search still finds the largest q where
-      // adding the (q+1)-th terminal does not increase density.
       int total = m + unknown;
-      int best_q = 0;
-      int left = 1, right = total - 1;
-      while (left <= right) {
-        int mid = left + (right - left) / 2;
-        if (leq(_threshold(mid), d_rv)) {
-          best_q = mid;
-          left = mid + 1;
-        } else {
-          right = mid - 1;
-        }
+      if (total == 0)
+        return Level2PrefixBound {};
+
+      if (mode == Level2BoundMode::Cheap) {
+        Level2PrefixBound bound;
+        bound.nterm = total;
+        bound.density = (d_rv + alive_weights.total_sum() + unknown * terminal_lb) / total;
+        return bound;
       }
 
-      int nterm = best_q + 1;
-      AdaptiveLevel2PrefixBound bound;
+      auto _threshold = [&](int q) -> double {
+        if (q < m) {
+          int rank_next = alive_counts.select_by_cumulative(q + 1);
+          return level2_threshold(q, distances[rank_next], alive_prefix_weight(q));
+        }
+        return level2_threshold(m, terminal_lb, alive_weights.total_sum());
+      };
+
+      int nterm = best_level2_prefix_length(total, d_rv, _threshold);
+
+      Level2PrefixBound bound;
       bound.nterm = nterm;
-      // Exact discovered prefix weight plus the optimistic unknown tail weight.
       bound.density = (
           d_rv +
           alive_prefix_weight(std::min(nterm, m)) +

@@ -78,6 +78,13 @@ The main experiment binary accepts `level1`, `adaptive_level1`, `level2`,
 terminal-side distances are discovered progressively and reused while each
 greedy iteration refreshes only the root-side distances.
 
+The `--level2-bound` option selects the optimistic lower-bound mode used by
+`fast_level2` and `adaptive_fast_level2`:
+
+- `cheap` (default for `fast_level2`): constant-time bound.
+- `threshold` (default for `adaptive_fast_level2`): O(log k) bound using the
+  threshold rule with binary search over discovered terminals.
+
 ## Tests
 
 ```bash

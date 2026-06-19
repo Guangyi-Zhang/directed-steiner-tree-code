@@ -528,3 +528,193 @@ TEST_CASE("level2_alg") {
   CHECK(tree->cost_sc == 2.5 + 1*3);
   CHECK((tree->terms == std::unordered_set<int> {14,15,16}));
 }
+
+
+TEST_CASE("level2_threshold returns q * next_weight - prefix_weight") {
+  using namespace dst;
+  CHECK(eq(level2_threshold(2, 5.0, 3.0), 7.0));
+  CHECK(eq(level2_threshold(0, 1.0, 0.0), 0.0));
+  CHECK(eq(level2_threshold(1, 4.0, 2.0), 2.0));
+}
+
+
+TEST_CASE("best_level2_prefix_length with plain vector thresholds") {
+  using namespace dst;
+
+  // Terminals with weights [1, 2, 4]: prefix_sums [1, 3, 7]
+  // theta(1) = 1*2 - 1 = 1, theta(2) = 2*4 - 3 = 5
+  std::vector<double> weights {1, 2, 4};
+  std::vector<double> prefix_sums {1, 3, 7};
+  auto thr = [&](int q) {
+    return level2_threshold(q, weights[q], prefix_sums[q-1]);
+  };
+
+  CHECK(best_level2_prefix_length(3, 0, thr) == 1);
+  CHECK(best_level2_prefix_length(3, 1, thr) == 2);
+  CHECK(best_level2_prefix_length(3, 5, thr) == 3);
+  CHECK(best_level2_prefix_length(3, 100, thr) == 3);
+
+  auto dummy = [](int) { return 0.0; };
+  CHECK(best_level2_prefix_length(0, 10, dummy) == 0);
+  CHECK(best_level2_prefix_length(1, 10, dummy) == 1);
+}
+
+
+TEST_CASE("Level2CenterIndex Cheap mode matches PartialTree density_LB") {
+  using namespace dst;
+  int k = 5;
+
+  Level2CenterIndex idx(0, 1, 1.0, k);
+  idx.add_term(11, 1);
+  idx.add_term(12, 2);
+
+  auto lb = idx.optimistic_bound(1.0, k, 2.0, false, Level2BoundMode::Cheap);
+  CHECK(eq(lb.density, idx.tree.density_LB(k, 2.0)));
+
+  // When ready, returns exact density
+  idx.add_term(13, 4);
+  CHECK(idx.tree.ready);
+  auto lb2 = idx.optimistic_bound(1.0, k, 4.0, false, Level2BoundMode::Cheap);
+  CHECK(eq(lb2.density, idx.tree.density()));
+}
+
+
+TEST_CASE("Level2CenterIndex Threshold mode uses binary search") {
+  using namespace dst;
+  Level2CenterIndex idx(0, 1, 1.0, 4);
+  idx.add_term(101, 1);
+  idx.add_term(102, 2);
+  idx.add_term(103, 4);
+
+  auto bound = idx.optimistic_bound(1.0, 3, 0, true, Level2BoundMode::Threshold);
+  CHECK(bound.nterm == 2);
+  CHECK(eq(bound.density, 2.0));
+}
+
+
+TEST_CASE("Level2CenterIndex erase_and_reset preserves sorted resume") {
+  using namespace dst;
+  Level2CenterIndex idx(0, 1, 1.0, 5);
+  idx.add_term(11, 1);
+  idx.add_term(12, 2);
+  idx.add_term(13, 4);
+  CHECK(idx.tree.ready);
+
+  idx.erase_and_reset({11});
+  CHECK(idx.tree.terms.count(12) == 1);
+  CHECK(idx.alive_discovered_count() == 2);
+
+  auto lb_cheap = idx.optimistic_bound(1.0, 4, 1.0, false, Level2BoundMode::Cheap);
+  auto lb_thr = idx.optimistic_bound(1.0, 4, 1.0, false, Level2BoundMode::Threshold);
+  CHECK(lb_cheap.density > 0);
+  CHECK(lb_thr.density > 0);
+}
+
+
+TEST_CASE("Level2CenterIndex zero_drv preserves Fenwick state") {
+  using namespace dst;
+  Level2CenterIndex idx(0, 1, 5.0, 4);
+  idx.add_term(11, 1);
+  idx.add_term(12, 2);
+
+  CHECK(idx.alive_discovered_count() == 2);
+  idx.zero_drv();
+  CHECK(idx.alive_discovered_count() == 2);
+
+  // After zero_drv, d_rv=0. Threshold theta(1) = 1*2 - 1 = 1 > 0, so nterm=1.
+  auto bound = idx.optimistic_bound(0.0, 2, 0, true, Level2BoundMode::Threshold);
+  CHECK(bound.nterm == 1);
+  CHECK(eq(bound.density, 1.0));
+
+  // With larger d_rv, can include both: theta(1) = 1 <= 1, so nterm=2.
+  auto bound2 = idx.optimistic_bound(1.0, 2, 0, true, Level2BoundMode::Threshold);
+  CHECK(bound2.nterm == 2);
+  CHECK(eq(bound2.density, (1.0 + 1.0 + 2.0) / 2));
+}
+
+
+TEST_CASE("AdaptiveLevel2CenterIndex Cheap vs Threshold mode") {
+  using namespace dst;
+  AdaptiveLevel2CenterIndex idx {5, 4};
+  idx.insert(201, 2);
+  idx.insert(202, 3);
+
+  auto cheap = idx.optimistic_bound(10, 4, 1, false, Level2BoundMode::Cheap);
+  auto threshold = idx.optimistic_bound(10, 4, 1, false, Level2BoundMode::Threshold);
+
+  CHECK(eq(cheap.density, (10.0 + 2 + 3 + 2*1.0) / 4));
+  CHECK(cheap.nterm == 4);
+  CHECK(leq(threshold.density, cheap.density));
+}
+
+
+TEST_CASE("AdaptiveLevel2CenterIndex both modes match when search exhausted") {
+  using namespace dst;
+  AdaptiveLevel2CenterIndex idx {5, 3};
+  idx.insert(201, 2);
+  idx.insert(202, 3);
+  idx.insert(203, 5);
+
+  auto cheap = idx.optimistic_bound(10, 3, 0, true, Level2BoundMode::Cheap);
+  auto threshold = idx.optimistic_bound(10, 3, 0, true, Level2BoundMode::Threshold);
+
+  CHECK(cheap.nterm == 3);
+  CHECK(threshold.nterm > 0);
+  CHECK(leq(threshold.density, cheap.density));
+}
+
+
+TEST_CASE("fast_level2 and adaptive_fast_level2 with both bound modes") {
+  using namespace dst;
+
+  std::vector<std::pair<int,int>> edges {
+    {0,1}, {0,2}, {0,3}, {0,4},
+    {1,11}, {2,12}, {3,13},
+    {4,11}, {4,12}, {4,13}
+  };
+  std::vector<double> weights {1,1,1,2.5, 2,2,2, 1,1,1};
+  std::vector<int> terms {11,12,13};
+  DST dt = DST(edges, weights, 0, terms);
+
+  auto f2_cheap = dt.fast_level2_alg(Level2BoundMode::Cheap);
+  auto f2_threshold = dt.fast_level2_alg(Level2BoundMode::Threshold);
+  auto af2_cheap = dt.adaptive_fast_level2_alg(Level2BoundMode::Cheap);
+  auto af2_threshold = dt.adaptive_fast_level2_alg(Level2BoundMode::Threshold);
+
+  CHECK(eq(f2_cheap->to_tree()->cost, 5.5));
+  CHECK(eq(f2_threshold->to_tree()->cost, 5.5));
+  CHECK(eq(af2_cheap->to_tree()->cost, 5.5));
+  CHECK(eq(af2_threshold->to_tree()->cost, 5.5));
+
+  CHECK(eq(f2_cheap->cost_sc, 5.5));
+  CHECK(eq(f2_threshold->cost_sc, 5.5));
+  CHECK(eq(af2_cheap->cost_sc, 5.5));
+  CHECK(eq(af2_threshold->cost_sc, 5.5));
+}
+
+
+TEST_CASE("bound modes on adaptive root distance graph") {
+  using namespace dst;
+
+  std::vector<std::pair<int,int>> edges {
+    {0,1}, {1,11}, {1,2}, {2,21}, {2,22}
+  };
+  std::vector<double> weights {4,1,5,1,1};
+  std::vector<int> terms {11,21,22};
+  DST dt = DST(edges, weights, 0, terms);
+
+  auto f2_cheap = dt.fast_level2_alg(Level2BoundMode::Cheap);
+  auto f2_threshold = dt.fast_level2_alg(Level2BoundMode::Threshold);
+  auto af2_cheap = dt.adaptive_fast_level2_alg(Level2BoundMode::Cheap);
+  auto af2_threshold = dt.adaptive_fast_level2_alg(Level2BoundMode::Threshold);
+
+  CHECK(eq(f2_cheap->cost_sc, 16));
+  CHECK(eq(f2_threshold->cost_sc, 16));
+  CHECK(eq(af2_cheap->cost_sc, 12));
+  CHECK(eq(af2_threshold->cost_sc, 12));
+
+  CHECK(eq(f2_cheap->to_tree()->cost, 12));
+  CHECK(eq(f2_threshold->to_tree()->cost, 12));
+  CHECK(eq(af2_cheap->to_tree()->cost, 12));
+  CHECK(eq(af2_threshold->to_tree()->cost, 12));
+}

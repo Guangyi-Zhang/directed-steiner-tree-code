@@ -162,16 +162,20 @@ namespace dst {
     }
 
 
-    auto fast_level2_alg() {
+    auto fast_level2_alg(Level2BoundMode bound_mode = Level2BoundMode::Cheap) {
       // dijktra from the root
       auto [dists_r, trace_r] = dijkstra(adj, w, root);
 
-      // init a PartialTree for each v
-      std::unordered_map<int, std::shared_ptr<PartialTree>> trees;
-      std::list<std::shared_ptr<PartialTree>> LBs;
+      // init a Level2CenterIndex for each v
+      std::unordered_map<int, Level2CenterIndex> center_idxs;
+      std::list<int> LBs;
       for (auto v: V) {
-        trees[v] = std::make_shared<PartialTree> (root, v, dists_r->at(v));
-        LBs.push_back(trees.at(v));
+        center_idxs.emplace(
+          std::piecewise_construct,
+          std::forward_as_tuple(v),
+          std::forward_as_tuple(root, v, dists_r->at(v), static_cast<int>(terms_dm.size()))
+        );
+        LBs.push_back(v);
       }
 
       CoordinatedDijkstra cosssp {adj_r, w, terms_dm, true}; // dijktra from each terminal
@@ -184,30 +188,29 @@ namespace dst {
       /*----------------------------------------------
        | define what to do after finding a greedy partial tree
        ----------------------------------------------*/
-      auto add_greedy = [&] (std::shared_ptr<PartialTree> best_) {
+      auto add_greedy = [&] (int greedy_v) {
         auto best = std::make_shared<PartialTree>();
-        *best = *best_; // copy
+        *best = center_idxs.at(greedy_v).tree; // copy
         if (DEBUG) fmt::println("level2 greedy through {}, d_rv={}, cov={}, density={}", best->v, best->d_rv, best->terms, best->density());
         for (auto t: best->terms) {
           cosssp.delete_source(t);
         }
         auto covered_by_best = par->append(best, true);
 
-        // update trees and LBs
+        // update center_idxs and LBs
         LBs.clear();
         double denbest_next = std::numeric_limits<double>::max();
-        for (auto v_tree: trees) { 
-          auto tree_v = v_tree.second;
-          tree_v->erase_and_reset(best->terms);
-          if (has_key(*covered_by_best, tree_v->v) and not has_key(*covered, tree_v->v)) // newly covered
-            tree_v->zero_drv();
+        for (auto &[v, idx]: center_idxs) {
+          idx.erase_and_reset(best->terms);
+          if (has_key(*covered_by_best, idx.tree.v) and not has_key(*covered, idx.tree.v))
+            idx.zero_drv();
 
-          if (denbest_next > tree_v->density()) {
-            denbest_next = tree_v->density();
-            v_best = tree_v->v;
+          if (denbest_next > idx.density()) {
+            denbest_next = idx.density();
+            v_best = idx.tree.v;
           }
 
-          LBs.push_back(tree_v);
+          LBs.push_back(v);
         }
 
         for (auto v: *covered_by_best)
@@ -219,69 +222,65 @@ namespace dst {
        ----------------------------------------------*/
       while (terms_dm.size() > par->terms.size()) {
         auto [t, v, d_vt] = cosssp.next();
-        //fmt::println("t={}, v={}, d_vt={}", t, v, d_vt);
 
         // run out of next()
-        if (t == NONVERTEX) { 
-          for (auto &p: trees) { // find best among trees
-            auto tr = p.second;
-            if (v_best == NONVERTEX or 
-                lq(tr->density(), trees.at(v_best)->density()) or
-                (eq(tr->density(), trees.at(v_best)->density()) and 
-                 tr->terms.size() > trees.at(v_best)->terms.size()))
-              v_best = tr->v;
+        if (t == NONVERTEX) {
+          for (auto &[v_, idx]: center_idxs) { // find best among trees
+            if (v_best == NONVERTEX or
+                lq(idx.density(), center_idxs.at(v_best).density()) or
+                (eq(idx.density(), center_idxs.at(v_best).density()) and
+                 idx.tree.terms.size() > center_idxs.at(v_best).tree.terms.size()))
+              v_best = idx.tree.v;
           }
-          auto tree_best = trees.at(v_best);
-          if (tree_best->terms.size() == 0)
+          if (center_idxs.at(v_best).tree.terms.size() == 0)
             break;
-          add_greedy(tree_best);
+          add_greedy(v_best);
           continue;
         }
 
         if (has_key(terms_dm, v))
           continue;
-        auto tree_v = trees.at(v);
-        tree_v->add_term(t, d_vt);
+        auto &idx_v = center_idxs.at(v);
+        idx_v.add_term(t, d_vt);
 
         // update v_best as an UB
         if (v_best == NONVERTEX)
           v_best = v;
-        auto tree_best_old = trees.at(v_best);
-        if(tree_v->density() < tree_best_old->density() or
-           (eq(tree_v->density(), tree_best_old->density()) and // break ties
-            tree_v->terms.size() > tree_best_old->terms.size())) {
+        auto &idx_best_old = center_idxs.at(v_best);
+        if(idx_v.density() < idx_best_old.density() or
+           (eq(idx_v.density(), idx_best_old.density()) and
+            idx_v.tree.terms.size() > idx_best_old.tree.terms.size())) {
           v_best = v;
         }
-        auto tree_best = trees.at(v_best);
-        if (DEBUG) fmt::println("best partree so far v={}, cost_sc={}, terms={}, LB={}", v_best, tree_best->cost_sc, tree_best->terms, LBs.front()->density_LB(terms_dm.size() - par->terms.size(), d_vt));
+        auto &idx_best = center_idxs.at(v_best);
+        int k = terms_dm.size() - par->terms.size();
+        if (DEBUG) fmt::println("best partree so far v={}, cost_sc={}, terms={}, LB={}", v_best, idx_best.tree.cost_sc, idx_best.tree.terms, center_idxs.at(LBs.front()).tree.density_LB(k, d_vt));
 
         // compare UB with LBs, remove as many LBs as possible
-        while (not LBs.empty() and
-               (LBs.front()->ready or 
-               leq(tree_best->density(), LBs.front()->density_LB(terms_dm.size() - par->terms.size(), d_vt)))
-        ) {
-          if (DEBUG) fmt::println("prune v={}, density={}, terms={}", LBs.front()->v, LBs.front()->density(), LBs.front()->terms);
-          if (DEBUG_fast_level2) strtest += std::to_string(LBs.front()->v) + ":" + std::to_string(LBs.front()->density_LB(terms_dm.size() - par->terms.size(), d_vt)) + ",";
-          LBs.pop_front();
+        while (not LBs.empty()) {
+          auto &idx_lb = center_idxs.at(LBs.front());
+          auto lb = idx_lb.optimistic_bound(idx_lb.tree.d_rv, k, d_vt, false, bound_mode);
+          if (idx_lb.tree.ready or leq(idx_best.density(), lb.density)) {
+            if (DEBUG) fmt::println("prune v={}, density={}, terms={}", idx_lb.tree.v, idx_lb.density(), idx_lb.tree.terms);
+            if (DEBUG_fast_level2) strtest += std::to_string(idx_lb.tree.v) + ":" + std::to_string(lb.density) + ",";
+            LBs.pop_front();
+          } else {
+            break;
+          }
         }
         if (LBs.size() >= 2 or
-            (LBs.size() == 1 and LBs.front()->v != v_best))
+            (LBs.size() == 1 and LBs.front() != v_best))
           continue;
 
         // found a greedy partial tree
-        if (not tree_best->is_ready(d_vt) and  // until full construction
-            tree_best->terms.size() < (terms_dm.size() - par->terms.size()))
-          // 1. wait for full construction
-          // 2. v_best has reached all remaining terminals
-          // 3. some terminals are not reachable
-          // 4. v_best need not wait with large d_vt as a LB
-          // 5. TODO: bi-direction SSSP
+        if (not idx_best.is_ready(d_vt) and  // until full construction
+            idx_best.tree.terms.size() < (terms_dm.size() - par->terms.size()))
           continue;
-        if (tree_best->terms.size() == 0) // the rest terminals not reachable
+        if (idx_best.tree.terms.size() == 0) // the rest terminals not reachable
           break;
         if (DEBUG_fast_level2) strtest += "greedy_by_pruning";
         #ifndef NO_FAST2_LB
-        add_greedy(tree_best);
+        add_greedy(v_best);
         #endif
       }
 
@@ -602,7 +601,7 @@ namespace dst {
     // Root-adaptive fast level-2: fixed terminal-side distances, dynamic root-side
     // distances. One persistent backward CoordinatedDijkstra; per-center Fenwick
     // indexes maintain best terminal prefixes as discoveries arrive.
-    auto adaptive_fast_level2_alg() {
+    auto adaptive_fast_level2_alg(Level2BoundMode bound_mode = Level2BoundMode::Threshold) {
       auto par = std::make_shared<PartialTreeManager> (root);
       par->trace_t = nullptr;
       std::unordered_set<int> terms_left(terms_dm.begin(), terms_dm.end());
@@ -635,7 +634,7 @@ namespace dst {
       };
 
       auto bound_can_beat = [&](
-          const AdaptiveLevel2PrefixBound &bound,
+          const Level2PrefixBound &bound,
           double best_density,
           int best_nterm
       ) {
@@ -689,7 +688,8 @@ namespace dst {
                   dists_r->at(v),
                   terms_left.size(),
                   terminal_lb,
-                  terminal_search_exhausted
+                  terminal_search_exhausted,
+                  bound_mode
               );
               if (bound_can_beat(bound, best_density, best_nterm))
                 break; // not yet certified
