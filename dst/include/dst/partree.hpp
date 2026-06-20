@@ -27,6 +27,8 @@ namespace dst {
     return q * next_weight - prefix_weight;
   }
 
+  // Binary search for the longest level-2 prefix with threshold(q) <= d_rv.
+  // Each index class passes its own threshold callback.
   template <class ThresholdFn>
   int best_level2_prefix_length(int total_terms, double d_rv, ThresholdFn threshold) {
     if (total_terms <= 1)
@@ -296,11 +298,7 @@ namespace dst {
   };
 
 
-  // Per-center index for fast level-2: wraps PartialTree with closed-form
-  // threshold mode. Fenwick trees are not needed here because terminals arrive
-  // in nondecreasing d(v,t) order and PartialTree already tracks the best
-  // prefix: when ready, the prefix is final; when not ready, all discovered
-  // alive terminals are in tree.terms.
+  // Per-center index for fast level-2: wraps PartialTree with closed-form threshold mode. 
   class Level2CenterIndex {
     public:
     PartialTree tree;
@@ -323,10 +321,11 @@ namespace dst {
     }
 
     double density() { return tree.density(); }
+
     bool is_ready(double d_LB = -1) { return tree.is_ready(d_LB); }
 
     Level2PrefixBound optimistic_bound(
-        double /*d_rv*/,
+        double /*d_rv, unused*/,
         int total_alive_terms,
         double terminal_lb,
         bool terminal_search_exhausted,
@@ -498,6 +497,10 @@ namespace dst {
         return bound;
       }
 
+      // Reuse the same threshold rule as the exact discovered query. For q < m,
+      // the next terminal is known exactly. For q >= m, the next terminal is an
+      // optimistic unknown with weight terminal_lb, so all thresholds in the
+      // unknown tail collapse to m * terminal_lb - sum(discovered weights).
       auto _threshold = [&](int q) -> double {
         if (q < m) {
           int rank_next = alive_counts.select_by_cumulative(q + 1);
@@ -506,8 +509,12 @@ namespace dst {
         return level2_threshold(m, terminal_lb, alive_weights.total_sum());
       };
 
+      // The threshold sequence is monotone after appending the constant
+      // lower-bound tail, so binary search still finds the largest q where
+      // adding the (q+1)-th terminal does not increase density.
       int nterm = best_level2_prefix_length(total, d_rv, _threshold);
 
+      // Threshold mode
       Level2PrefixBound bound;
       bound.nterm = nterm;
       bound.density = (

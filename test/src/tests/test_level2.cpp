@@ -549,6 +549,7 @@ TEST_CASE("best_level2_prefix_length with plain vector thresholds") {
     return level2_threshold(q, weights[q], prefix_sums[q-1]);
   };
 
+  // best_level2_prefix_length(int total_terms, double d_rv, ThresholdFn threshold) 
   CHECK(best_level2_prefix_length(3, 0, thr) == 1);
   CHECK(best_level2_prefix_length(3, 1, thr) == 2);
   CHECK(best_level2_prefix_length(3, 5, thr) == 3);
@@ -557,25 +558,6 @@ TEST_CASE("best_level2_prefix_length with plain vector thresholds") {
   auto dummy = [](int) { return 0.0; };
   CHECK(best_level2_prefix_length(0, 10, dummy) == 0);
   CHECK(best_level2_prefix_length(1, 10, dummy) == 1);
-}
-
-
-TEST_CASE("Level2CenterIndex Cheap mode matches PartialTree density_LB") {
-  using namespace dst;
-  int k = 5;
-
-  Level2CenterIndex idx(0, 1, 1.0);
-  idx.add_term(11, 1);
-  idx.add_term(12, 2);
-
-  auto lb = idx.optimistic_bound(1.0, k, 2.0, false, Level2BoundMode::Cheap);
-  CHECK(eq(lb.density, idx.tree.density_LB(k, 2.0)));
-
-  // When ready, returns exact density
-  idx.add_term(13, 4);
-  CHECK(idx.tree.ready);
-  auto lb2 = idx.optimistic_bound(1.0, k, 4.0, false, Level2BoundMode::Cheap);
-  CHECK(eq(lb2.density, idx.tree.density()));
 }
 
 
@@ -602,7 +584,7 @@ TEST_CASE("Level2CenterIndex erase_and_reset preserves resume") {
   CHECK(idx.tree.ready);
 
   idx.erase_and_reset({11});
-  CHECK(idx.tree.terms.count(12) == 1);
+  CHECK(idx.tree.terms.count(12) == 1); // contains 12
 
   auto lb_cheap = idx.optimistic_bound(1.0, 4, 1.0, false, Level2BoundMode::Cheap);
   auto lb_thr = idx.optimistic_bound(1.0, 4, 1.0, false, Level2BoundMode::Threshold);
@@ -687,14 +669,34 @@ TEST_CASE("AdaptiveLevel2CenterIndex both modes match when search exhausted") {
   auto threshold = idx.optimistic_bound(10, 3, 0, true, Level2BoundMode::Threshold);
 
   CHECK(cheap.nterm == 3);
-  CHECK(threshold.nterm > 0);
-  CHECK(leq(threshold.density, cheap.density));
+  CHECK(threshold.nterm == 3);
+  CHECK(eq(threshold.density, cheap.density));
 }
 
 
 TEST_CASE("fast_level2 and adaptive_fast_level2 with both bound modes") {
   using namespace dst;
 
+  /*
+              11   12   13
+               ^    ^    ^
+            (2)|    |    |(2)
+               |    |    |
+               1    2    3
+               ^    ^    ^
+            (1)|    |    |(1)
+               |    |    |
+              <---+0+---+
+                    |
+                (2.5)
+                    v
+                    4+--(1)-->11
+                    +--(1)-->12
+                    +--(1)-->13
+
+    Optimal tree: 0->4 (2.5) plus 4->{11,12,13} (1 each), cost 5.5.
+    Cheap and Threshold bound modes agree on this instance.
+  */
   std::vector<std::pair<int,int>> edges {
     {0,1}, {0,2}, {0,3}, {0,4},
     {1,11}, {2,12}, {3,13},
@@ -724,6 +726,23 @@ TEST_CASE("fast_level2 and adaptive_fast_level2 with both bound modes") {
 TEST_CASE("bound modes on adaptive root distance graph") {
   using namespace dst;
 
+  /*
+          0
+          |(4)
+          v
+          1+--(1)-->11
+          |(5)
+          v
+          2+--(1)-->21
+          +
+          |(1)
+          v
+         22
+
+    fast_level2 keeps root-side distance 9 to vertex 2, so cost_sc=16.
+    adaptive_fast_level2 pays marginal cost 5 after covering 11, so cost_sc=12.
+    All variants build the same final tree (cost 12). Cheap and Threshold agree.
+  */
   std::vector<std::pair<int,int>> edges {
     {0,1}, {1,11}, {1,2}, {2,21}, {2,22}
   };

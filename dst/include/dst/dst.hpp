@@ -162,7 +162,7 @@ namespace dst {
     }
 
 
-    auto fast_level2_alg(Level2BoundMode bound_mode = Level2BoundMode::Cheap) {
+    auto fast_level2_alg(Level2BoundMode bound_mode = Level2BoundMode::Threshold) {
       // dijktra from the root
       auto [dists_r, trace_r] = dijkstra(adj, w, root);
 
@@ -202,7 +202,7 @@ namespace dst {
         double denbest_next = std::numeric_limits<double>::max();
         for (auto &[v, idx]: center_idxs) {
           idx.erase_and_reset(best->terms);
-          if (has_key(*covered_by_best, idx.tree.v) and not has_key(*covered, idx.tree.v))
+          if (has_key(*covered_by_best, idx.tree.v) and not has_key(*covered, idx.tree.v)) // newly covered
             idx.zero_drv();
 
           if (denbest_next > idx.density()) {
@@ -601,7 +601,7 @@ namespace dst {
     // Root-adaptive fast level-2: fixed terminal-side distances, dynamic root-side
     // distances. One persistent backward CoordinatedDijkstra; per-center Fenwick
     // indexes maintain best terminal prefixes as discoveries arrive.
-    auto adaptive_fast_level2_alg(Level2BoundMode bound_mode = Level2BoundMode::Threshold) {
+    auto adaptive_fast_level2_alg(Level2BoundMode bound_mode = Level2BoundMode::Cheap) {
       auto par = std::make_shared<PartialTreeManager> (root);
       par->trace_t = nullptr;
       std::unordered_set<int> terms_left(terms_dm.begin(), terms_dm.end());

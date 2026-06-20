@@ -81,10 +81,9 @@ greedy iteration refreshes only the root-side distances.
 The `--level2-bound` option selects the optimistic lower-bound mode used by
 `fast_level2` and `adaptive_fast_level2`:
 
-- `cheap` (default for `fast_level2`): constant-time bound.
-- `threshold` (default for `adaptive_fast_level2`): tighter bound using the
-  threshold rule. For `fast_level2` this is a closed-form O(1) comparison; for
-  `adaptive_fast_level2` it uses O(log k) binary search over discovered
+- `threshold` (default for `fast_level2`): constant-time bound.
+- `cheap` (default for `adaptive_fast_level2`): constant-time bound. For
+  `adaptive_fast_level2` tighter threshold bound uses O(log k) binary search over discovered
   terminals.
 
 ## Tests
