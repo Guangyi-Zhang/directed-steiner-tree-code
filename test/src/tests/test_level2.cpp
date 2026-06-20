@@ -643,6 +643,48 @@ TEST_CASE("Level2CenterIndex Threshold chooses full tail when tail cheap") {
 }
 
 
+TEST_CASE("Covered terminal in terms_after_ready is not re-added") {
+  using namespace dst;
+  // d_rv=1, terminals: 11(d=1), 12(d=3), 13(d=5)
+  // add_term(11,1): cost_sc=2, terms={11}, density=2, not ready
+  // add_term(12,3): new_den=(2+3)/2=2.5, lq(2,2.5)=true → ready, terms_after_ready=[12]
+  // add_term(13,5): ready → terms_after_ready=[12,13]
+  Level2CenterIndex idx(0, 1, 1.0);
+  idx.add_term(11, 1);
+  idx.add_term(12, 3);
+  idx.add_term(13, 5);
+  CHECK(idx.tree.ready);
+  CHECK(idx.tree.terms.count(13) == 0);
+
+  // Cover terminal 13. During replay, 12 is re-added and makes tree ready
+  // before 13 is reached, so 13 stays in terms_after_ready.
+  idx.erase_and_reset({13});
+  CHECK(idx.tree.ready);
+  CHECK(idx.tree.terms.count(13) == 0);
+
+  // Now cover terminals 11 and 12. Replay reaches 13 but it must be skipped
+  // because it was covered in the earlier batch.
+  idx.erase_and_reset({11, 12});
+  CHECK(idx.tree.terms.count(13) == 0);
+  CHECK(idx.tree.terms.count(11) == 0);
+  CHECK(idx.tree.terms.count(12) == 0);
+}
+
+
+TEST_CASE("Level2CenterIndex add_term ignores dead terminals") {
+  using namespace dst;
+  Level2CenterIndex idx(0, 1, 1.0);
+  idx.add_term(11, 1);
+  idx.add_term(12, 2);
+
+  idx.erase_and_reset({12});
+
+  // Re-adding a dead terminal must be a no-op.
+  idx.add_term(12, 2);
+  CHECK(idx.tree.terms.count(12) == 0);
+}
+
+
 TEST_CASE("AdaptiveLevel2CenterIndex Cheap vs Threshold mode") {
   using namespace dst;
   AdaptiveLevel2CenterIndex idx {5, 4};

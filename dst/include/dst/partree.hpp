@@ -139,6 +139,7 @@ namespace dst {
     void zero_drv() {
       // reset
       cost_sc = 0;
+      // d_rv = 0; // not sure if this is needed
       ready = false;
       std::unordered_set<int> terms_cp = std::move(terms);
       std::list<int> terms_before_ready_cp = std::move(terms_before_ready);
@@ -298,10 +299,11 @@ namespace dst {
   };
 
 
-  // Per-center index for fast level-2: wraps PartialTree with closed-form threshold mode. 
+  // Per-center index for fast level-2: wraps PartialTree with closed-form threshold mode.
   class Level2CenterIndex {
     public:
     PartialTree tree;
+    std::unordered_set<int> dead_terms;
 
     Level2CenterIndex() {};
 
@@ -309,11 +311,15 @@ namespace dst {
         tree {r, v, d_rv} {};
 
     void add_term(int t, double d_vt) {
+      if (has_key(dead_terms, t))
+        return;
       tree.add_term(t, d_vt);
     }
 
     void erase_and_reset(const std::unordered_set<int> &terms_del) {
-      tree.erase_and_reset(terms_del);
+      for (auto t : terms_del)
+        dead_terms.insert(t);
+      tree.erase_and_reset(dead_terms);
     }
 
     void zero_drv() {
