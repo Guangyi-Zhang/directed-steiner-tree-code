@@ -601,7 +601,7 @@ namespace dst {
     // Root-adaptive fast level-2: fixed terminal-side distances, dynamic root-side
     // distances. One persistent backward CoordinatedDijkstra; per-center Fenwick
     // indexes maintain best terminal prefixes as discoveries arrive.
-    auto adaptive_fast_level2_alg(Level2BoundMode bound_mode = Level2BoundMode::Cheap) {
+    auto adaptive_fast_level2_alg(Level2BoundMode bound_mode = Level2BoundMode::Threshold) {
       auto par = std::make_shared<PartialTreeManager> (root);
       par->trace_t = nullptr;
       std::unordered_set<int> terms_left(terms_dm.begin(), terms_dm.end());

@@ -807,3 +807,193 @@ TEST_CASE("bound modes on adaptive root distance graph") {
   CHECK(eq(af2_cheap->to_tree()->cost, 12));
   CHECK(eq(af2_threshold->to_tree()->cost, 12));
 }
+
+
+TEST_CASE("AdaptiveLevel2CenterIndex cached discovered bound matches binary search") {
+  using namespace dst;
+
+  AdaptiveLevel2CenterIndex idx {5, 5};
+  idx.insert(201, 1);
+  idx.insert(202, 3);
+  idx.insert(203, 6);
+
+  // theta(1) = 1*3 - 1 = 2 <= 4, theta(2) = 2*6 - 4 = 8 > 4
+  // Best prefix length = 2, density = (4 + 1 + 3) / 2 = 4.
+  auto bound = idx.discovered_bound(4.0);
+  CHECK(bound.nterm == 2);
+  CHECK(eq(bound.density, 4.0));
+
+  // Second call with same d_rv uses cache.
+  auto bound2 = idx.discovered_bound(4.0);
+  CHECK(bound2.nterm == 2);
+  CHECK(eq(bound2.density, 4.0));
+}
+
+
+TEST_CASE("AdaptiveLevel2CenterIndex Threshold cached prefix stops early ignores unknown") {
+  using namespace dst;
+
+  AdaptiveLevel2CenterIndex idx {5, 5};
+  idx.insert(201, 1);
+  idx.insert(202, 3);
+  idx.insert(203, 6);
+
+  // Refresh cache at d_rv = 4. Best prefix = 2 (stops at 203).
+  idx.discovered_bound(4.0);
+
+  // Unknown terminals at terminal_lb = 7 >= w_3 = 6:
+  // prefix stops early at nterm=2, unknown tail cannot help.
+  auto bound = idx.optimistic_bound(4.0, 5, 7.0, false, Level2BoundMode::Threshold);
+  CHECK(bound.nterm == 2);
+  CHECK(eq(bound.density, 4.0));
+}
+
+
+TEST_CASE("AdaptiveLevel2CenterIndex Threshold cached prefix full, cheap tail wins") {
+  using namespace dst;
+
+  AdaptiveLevel2CenterIndex idx {5, 3};
+  idx.insert(201, 2);
+
+  // Refresh cache at d_rv = 10. Best prefix = 1 = m.
+  idx.discovered_bound(10.0);
+
+  // total_alive=3, unknown=2, terminal_lb=3.
+  // current_density = (10+2)/1 = 12
+  // full_density = (10+2+2*3)/3 = 6
+  // full tail wins.
+  auto bound = idx.optimistic_bound(10.0, 3, 3.0, false, Level2BoundMode::Threshold);
+  CHECK(bound.nterm == 3);
+  CHECK(eq(bound.density, 6.0));
+}
+
+
+TEST_CASE("AdaptiveLevel2CenterIndex Threshold cached prefix full, expensive tail loses") {
+  using namespace dst;
+
+  AdaptiveLevel2CenterIndex idx {5, 3};
+  idx.insert(201, 1);
+
+  // Refresh cache at d_rv = 1. Best prefix = 1 = m.
+  idx.discovered_bound(1.0);
+
+  // total_alive=3, unknown=2, terminal_lb=10.
+  // current_density = (1+1)/1 = 2
+  // full_density = (1+1+2*10)/3 = 22/3 ~ 7.33
+  // current prefix wins.
+  auto bound = idx.optimistic_bound(1.0, 3, 10.0, false, Level2BoundMode::Threshold);
+  CHECK(bound.nterm == 1);
+  CHECK(eq(bound.density, 2.0));
+}
+
+
+TEST_CASE("AdaptiveLevel2CenterIndex insert extends cached prefix") {
+  using namespace dst;
+
+  AdaptiveLevel2CenterIndex idx {5, 5};
+  idx.insert(201, 1);
+  idx.insert(202, 3);
+
+  // Refresh cache at d_rv = 10. Both terminals in prefix (nterm=2=m).
+  auto bound = idx.discovered_bound(10.0);
+  CHECK(bound.nterm == 2);
+  CHECK(eq(bound.density, 7.0));
+
+  // Insert terminal 203 with d=5. theta(2) = 2*5 - 4 = 6 <= 10, so it extends.
+  idx.insert(203, 5);
+  auto bound2 = idx.discovered_bound(10.0);
+  CHECK(bound2.nterm == 3);
+  CHECK(eq(bound2.density, (10.0 + 1 + 3 + 5) / 3));
+
+  // Insert terminal 204 with d=20. theta(3) = 3*20 - 9 = 51 > 10, does not extend.
+  idx.insert(204, 20);
+  auto bound3 = idx.discovered_bound(10.0);
+  CHECK(bound3.nterm == 3);
+  CHECK(eq(bound3.density, (10.0 + 1 + 3 + 5) / 3));
+}
+
+
+TEST_CASE("AdaptiveLevel2CenterIndex erase invalidates cache, refresh restores") {
+  using namespace dst;
+
+  AdaptiveLevel2CenterIndex idx {5, 5};
+  idx.insert(201, 1);
+  idx.insert(202, 3);
+  idx.insert(203, 6);
+
+  idx.discovered_bound(4.0);
+
+  // Erase terminal 201 (rank 0).
+  idx.erase({201});
+
+  // Alive terminals: 202 (d=3), 203 (d=6).
+  // theta(1) = 1*6 - 3 = 3 <= 4, so nterm = 2.
+  // density = (4 + 3 + 6) / 2 = 6.5
+  auto bound = idx.discovered_bound(4.0);
+  CHECK(bound.nterm == 2);
+  CHECK(eq(bound.density, 6.5));
+}
+
+
+TEST_CASE("AdaptiveLevel2CenterIndex cached optimistic matches expected on multiple configs") {
+  using namespace dst;
+
+  {
+    // Config 1: early stop, unknown tail ignored
+    AdaptiveLevel2CenterIndex idx {5, 5};
+    idx.insert(100, 1);
+    idx.insert(101, 3);
+    idx.insert(102, 6);
+    idx.discovered_bound(4.0);
+    auto r = idx.optimistic_bound(4.0, 5, 7.0, false, Level2BoundMode::Threshold);
+    CHECK(r.nterm == 2);
+    CHECK(eq(r.density, 4.0));
+  }
+
+  {
+    // Config 2: all discovered, cheap tail wins
+    AdaptiveLevel2CenterIndex idx {5, 3};
+    idx.insert(100, 2);
+    idx.discovered_bound(10.0);
+    auto r = idx.optimistic_bound(10.0, 3, 3.0, false, Level2BoundMode::Threshold);
+    CHECK(r.nterm == 3);
+    CHECK(eq(r.density, 6.0));
+  }
+
+  {
+    // Config 3: all discovered, expensive tail loses
+    AdaptiveLevel2CenterIndex idx {5, 3};
+    idx.insert(100, 1);
+    idx.discovered_bound(1.0);
+    auto r = idx.optimistic_bound(1.0, 3, 10.0, false, Level2BoundMode::Threshold);
+    CHECK(r.nterm == 1);
+    CHECK(eq(r.density, 2.0));
+  }
+
+  {
+    // Config 4: exhausted search, no unknowns
+    AdaptiveLevel2CenterIndex idx {5, 3};
+    idx.insert(100, 1);
+    idx.insert(101, 2);
+    idx.insert(102, 4);
+    idx.discovered_bound(1.0);
+    auto r = idx.optimistic_bound(1.0, 3, 0, true, Level2BoundMode::Threshold);
+    CHECK(r.nterm == 2);
+    CHECK(eq(r.density, 2.0));
+  }
+
+  {
+    // Config 5: no terminals at all
+    AdaptiveLevel2CenterIndex idx {5, 3};
+    auto r = idx.optimistic_bound(10.0, 0, 5.0, false, Level2BoundMode::Threshold);
+    CHECK(r.nterm == 0);
+  }
+
+  {
+    // Config 6: no discovered, all unknown
+    AdaptiveLevel2CenterIndex idx {5, 3};
+    auto r = idx.optimistic_bound(10.0, 3, 4.0, false, Level2BoundMode::Threshold);
+    CHECK(r.nterm == 3);
+    CHECK(eq(r.density, (10.0 + 3 * 4.0) / 3));
+  }
+}

@@ -16,6 +16,8 @@
 
 namespace dst {
 
+  // Cheap: assume all undiscovered terminals cost terminal_lb.
+  // Threshold: compare discovered prefix vs full optimistic tail (stronger, still O(1)).
   enum class Level2BoundMode { Cheap, Threshold };
 
   struct Level2PrefixBound {
@@ -23,6 +25,8 @@ namespace dst {
     int nterm {0};
   };
 
+  // Threshold for adding the (q+1)-th terminal to a prefix of q terminals:
+  // adding helps iff threshold(q) <= d_rv.
   inline double level2_threshold(int q, double next_weight, double prefix_weight) {
     return q * next_weight - prefix_weight;
   }
@@ -404,6 +408,18 @@ namespace dst {
     FenwickTree alive_counts;  // 1 per alive terminal, 0 if covered
     FenwickTree alive_weights; // d(v,t) per alive terminal, 0 if covered
 
+    // Scalar alive totals (O(1) access; Fenwick total_sum() is not used on hot paths).
+    int m_alive = 0;
+    double w_alive = 0;
+
+    // Best discovered-alive prefix for cached_d_rv. Invalidated on erase; incrementally
+    // extended on insert when the prefix already used all previously discovered terminals.
+    bool cache_valid = false;
+    double cached_d_rv = 0;
+    int cached_nterm = 0;
+    double cached_prefix_weight = 0;
+    double cached_density = std::numeric_limits<double>::max();
+
     AdaptiveLevel2CenterIndex() {};
 
     AdaptiveLevel2CenterIndex(int v, int max_terms) :
@@ -421,10 +437,26 @@ namespace dst {
       rank_of_term[t] = rank;
       alive_counts.add(rank, 1);
       alive_weights.add(rank, d_vt);
+
+      int old_m = m_alive;
+      m_alive++;
+      w_alive += d_vt;
+
+      // If the cached prefix already included all old_m discovered terminals, try
+      // extending it by one without a full binary search.
+      if (cache_valid and cached_nterm == old_m) {
+        double thr = level2_threshold(old_m, d_vt, cached_prefix_weight);
+        if (leq(thr, cached_d_rv)) {
+          cached_nterm = m_alive;
+          cached_prefix_weight += d_vt;
+          cached_density = (cached_d_rv + cached_prefix_weight) / cached_nterm;
+        }
+      }
     }
 
     // Mark covered terminals dead in both Fenwick trees (values stay at rank).
     void erase(const std::unordered_set<int> &terms_del) {
+      bool changed = false;
       for (auto t: terms_del) {
         if (not has_key(rank_of_term, t))
           continue;
@@ -434,11 +466,35 @@ namespace dst {
           continue;
         alive_counts.add(rank, -1);
         alive_weights.add(rank, -distances[rank]);
+        m_alive--;
+        w_alive -= distances[rank];
+        changed = true;
       }
+      if (changed)
+        cache_valid = false; // holes in rank order; prefix must be recomputed
     }
 
     int alive_discovered_count() const {
-      return static_cast<int>(alive_counts.total_sum() + 0.5); // floating point rounding
+      return m_alive;
+    }
+
+    // Recompute best discovered-alive prefix for d_rv (binary search via Fenwick trees).
+    void refresh_cache(double d_rv) {
+      cached_d_rv = d_rv;
+      if (m_alive == 0) { // no alive terminals
+        cached_nterm = 0;
+        cached_prefix_weight = 0;
+        cached_density = std::numeric_limits<double>::max();
+        cache_valid = true;
+        return;
+      }
+      cached_nterm = best_prefix_length(d_rv);
+      cached_prefix_weight = alive_prefix_weight(cached_nterm);
+      if (cached_nterm > 0)
+        cached_density = (d_rv + cached_prefix_weight) / cached_nterm;
+      else
+        cached_density = std::numeric_limits<double>::max();
+      cache_valid = true;
     }
 
     // Weight sum of the first nterm alive terminals in fixed rank order.
@@ -462,15 +518,17 @@ namespace dst {
       return best_level2_prefix_length(m, d_rv, _threshold);
     }
 
-    // Density bound using only discovered alive terminals.
-    Level2PrefixBound discovered_bound(double d_rv) const {
+    // Density bound using only discovered alive terminals (uses cached prefix).
+    Level2PrefixBound discovered_bound(double d_rv) {
+      if (!cache_valid || !eq(cached_d_rv, d_rv))
+        refresh_cache(d_rv);
+
       Level2PrefixBound bound;
-      int nterm = best_prefix_length(d_rv);
-      if (nterm == 0)
+      if (cached_nterm == 0)
         return bound;
 
-      bound.nterm = nterm;
-      bound.density = (d_rv + alive_prefix_weight(nterm)) / nterm;
+      bound.nterm = cached_nterm;
+      bound.density = cached_density;
       return bound;
     }
 
@@ -489,8 +547,11 @@ namespace dst {
         double terminal_lb,
         bool terminal_search_exhausted,
         Level2BoundMode mode = Level2BoundMode::Threshold
-    ) const {
-      int m = alive_discovered_count();
+    ) {
+      if (!cache_valid || !eq(cached_d_rv, d_rv))
+        refresh_cache(d_rv);
+
+      int m = m_alive;
       int unknown = terminal_search_exhausted ? 0 : std::max(0, total_alive_terms - m);
       int total = m + unknown;
       if (total == 0)
@@ -499,43 +560,61 @@ namespace dst {
       if (mode == Level2BoundMode::Cheap) {
         Level2PrefixBound bound;
         bound.nterm = total;
-        bound.density = (d_rv + alive_weights.total_sum() + unknown * terminal_lb) / total;
+        bound.density = (d_rv + w_alive + unknown * terminal_lb) / total;
         return bound;
       }
 
-      // Reuse the same threshold rule as the exact discovered query. For q < m,
-      // the next terminal is known exactly. For q >= m, the next terminal is an
-      // optimistic unknown with weight terminal_lb, so all thresholds in the
-      // unknown tail collapse to m * terminal_lb - sum(discovered weights).
-      auto _threshold = [&](int q) -> double {
-        if (q < m) {
-          int rank_next = alive_counts.select_by_cumulative(q + 1);
-          return level2_threshold(q, distances[rank_next], alive_prefix_weight(q));
-        }
-        return level2_threshold(m, terminal_lb, alive_weights.total_sum());
-      };
+      // Threshold mode: O(1) case split on cached best discovered prefix.
+      // If cached_nterm < m, unknown terminals (>= terminal_lb) cannot beat an
+      // already-rejected next discovered terminal. If cached_nterm == m, only two
+      // candidates remain: the discovered prefix vs adding all unknown at terminal_lb.
 
-      // The threshold sequence is monotone after appending the constant
-      // lower-bound tail, so binary search still finds the largest q where
-      // adding the (q+1)-th terminal does not increase density.
-      int nterm = best_level2_prefix_length(total, d_rv, _threshold);
+      if (m == 0) {
+        Level2PrefixBound bound;
+        bound.nterm = total;
+        bound.density = (d_rv + total * terminal_lb) / total;
+        return bound;
+      }
 
-      // Threshold mode
+      if (unknown == 0) {
+        Level2PrefixBound bound;
+        bound.nterm = cached_nterm;
+        bound.density = cached_density;
+        return bound;
+      }
+
+      // m > 0 and unknown > 0.
+      if (cached_nterm < m) {
+        // Best prefix stops early among discovered terminals.
+        // Unknown terminals are at least as expensive, so they cannot help.
+        Level2PrefixBound bound;
+        bound.nterm = cached_nterm;
+        bound.density = cached_density;
+        return bound;
+      }
+
+      // cached_nterm == m: prefix uses all discovered terminals.
+      // Compare cached discovered density with full optimistic tail density.
+      double full_density = (d_rv + w_alive + unknown * terminal_lb) / total;
+
       Level2PrefixBound bound;
-      bound.nterm = nterm;
-      bound.density = (
-          d_rv +
-          alive_prefix_weight(std::min(nterm, m)) +
-          std::max(0, nterm - m) * terminal_lb
-      ) / nterm;
+      if (leq(full_density, cached_density)) {
+        bound.density = full_density;
+        bound.nterm = total;
+      } else {
+        bound.density = cached_density;
+        bound.nterm = m;
+      }
       return bound;
     }
 
     // Build PartialTree(root, v, d_rv) with the best discovered alive prefix.
-    auto partree(int root, double d_rv) const {
+    auto partree(int root, double d_rv) {
+      if (!cache_valid || !eq(cached_d_rv, d_rv))
+        refresh_cache(d_rv);
+
       auto par = std::make_shared<PartialTree> (root, v, d_rv);
-      int nterm = best_prefix_length(d_rv);
-      for (int i = 1; i <= nterm; i++) {
+      for (int i = 1; i <= cached_nterm; i++) {
         int rank = alive_counts.select_by_cumulative(i);
         int t = term_order[rank];
         double d_vt = distances[rank];
