@@ -506,43 +506,51 @@ namespace dst {
     auto fast_level2_minden(
         std::shared_ptr<std::unordered_map<int,double>> dists_r,
         const std::unordered_set<int> &terms_left,
-        const std::unordered_map<std::pair<int,int>, double, boost::hash<std::pair<int,int>>> &edgeweight
+        const std::unordered_map<std::pair<int,int>, double, boost::hash<std::pair<int,int>>> &edgeweight,
+        Level2BoundMode bound_mode = Level2BoundMode::Cheap
     ) {
-      // init a PartialTree for each v reachable from root
-      std::unordered_map<int, std::shared_ptr<PartialTree>> trees;
-      std::list<std::shared_ptr<PartialTree>> LBs;
+      // init a Level2CenterIndex for each v reachable from root
+      std::unordered_map<int, Level2CenterIndex> center_idxs;
+      std::list<int> LBs;
       for (auto v: V) {
         if (not has_key(*dists_r, v))
           continue;
-        trees[v] = std::make_shared<PartialTree> (root, v, dists_r->at(v));
-        LBs.push_back(trees.at(v));
+        center_idxs.emplace(
+          std::piecewise_construct,
+          std::forward_as_tuple(v),
+          std::forward_as_tuple(root, v, dists_r->at(v))
+        );
+        LBs.push_back(v);
       }
 
       CoordinatedDijkstra cosssp {adj_r, edgeweight, terms_left, true}; // backward Dijkstra from each remaining terminal
       int v_best {NONVERTEX};
 
       // function: update the v_best with lowest density (UB) if tree_v has lower density
-      auto update_best = [&] (std::shared_ptr<PartialTree> tree_v) {
+      auto update_best = [&] (int v) {
         if (v_best == NONVERTEX) {
-          v_best = tree_v->v;
+          v_best = v;
           return;
         }
-        auto tree_best = trees.at(v_best);
-        if (tree_v->density() < tree_best->density() or
-            (eq(tree_v->density(), tree_best->density()) and
-             tree_v->terms.size() > tree_best->terms.size())) {
-          v_best = tree_v->v;
+        auto &idx_v = center_idxs.at(v);
+        auto &idx_best = center_idxs.at(v_best);
+        if (idx_v.density() < idx_best.density() or
+            (eq(idx_v.density(), idx_best.density()) and
+             idx_v.tree.terms.size() > idx_best.tree.terms.size())) {
+          v_best = v;
         }
       };
 
-      // function: choose the v_best with lowest density (UB)
-      auto choose_best = [&] () {
-        for (auto &p: trees) {
-          update_best(p.second);
+      // function: choose the v_best among all centers with lowest density (UB)
+      auto choose_best = [&] () -> std::shared_ptr<PartialTree> {
+        for (auto &p: center_idxs) {
+          update_best(p.first);
         }
         if (v_best == NONVERTEX)
-          return std::shared_ptr<PartialTree> {nullptr};
-        return trees.at(v_best);
+          return nullptr;
+        auto best = std::make_shared<PartialTree>();
+        *best = center_idxs.at(v_best).tree; // copy
+        return best;
       };
 
       while (true) {
@@ -555,19 +563,20 @@ namespace dst {
           return std::make_tuple(best, cosssp.trace_t, sssp_nodes_visited);
         }
 
-        if (has_key(terms_dm, v) or not has_key(trees, v))
+        if (has_key(terms_dm, v) or not has_key(center_idxs, v))
           continue;
 
-        auto tree_v = trees.at(v);
-        tree_v->add_term(t, d_vt);
-        update_best(tree_v);
-        auto tree_best = trees.at(v_best);
+        auto &idx_v = center_idxs.at(v);
+        idx_v.add_term(t, d_vt);
+        update_best(v);
+        auto &idx_best = center_idxs.at(v_best);
 
         // prune LBs that cannot beat the current UB
+        int k = terms_left.size();
         for (auto it = LBs.begin(); it != LBs.end(); ) {
-          auto tree_lb = *it;
-          if (tree_lb->ready or
-              leq(tree_best->density(), tree_lb->density_LB(terms_left.size(), d_vt))) {
+          auto &idx_lb = center_idxs.at(*it);
+          auto lb = idx_lb.optimistic_bound(idx_lb.tree.d_rv, k, d_vt, false, bound_mode);
+          if (idx_lb.tree.ready or leq(idx_best.density(), lb.density)) {
             it = LBs.erase(it); // safe only for list
           } else {
             ++it;
@@ -576,8 +585,8 @@ namespace dst {
 
         // wait until only v_best remains among surviving LBs
         bool has_other_lb = false;
-        for (auto tree_lb: LBs) {
-          if (tree_lb->v != v_best) {
+        for (auto v_lb: LBs) {
+          if (v_lb != v_best) {
             has_other_lb = true;
             break;
           }
@@ -586,14 +595,16 @@ namespace dst {
           continue;
 
         // early stop once the best tree is fully determined
-        if (not tree_best->is_ready(d_vt) and
-            tree_best->terms.size() < terms_left.size())
+        if (not idx_best.is_ready(d_vt) and
+            idx_best.tree.terms.size() < terms_left.size())
           continue;
 
+        auto best = std::make_shared<PartialTree>();
+        *best = idx_best.tree; // copy
         int sssp_nodes_visited = 0;
         for (auto &p: *(cosssp.distances_t))
           sssp_nodes_visited += p.second->size();
-        return std::make_tuple(tree_best, cosssp.trace_t, sssp_nodes_visited);
+        return std::make_tuple(best, cosssp.trace_t, sssp_nodes_visited);
       }
     }
 
@@ -745,7 +756,7 @@ namespace dst {
     }
 
 
-    auto full_adaptive_fast_level2_alg() {
+    auto full_adaptive_fast_level2_alg(Level2BoundMode bound_mode = Level2BoundMode::Threshold) {
       auto par = std::make_shared<PartialTreeManager> (root);
       std::unordered_set<int> terms_left(terms_dm.begin(), terms_dm.end());
       int sssp_nodes_visited = 0;
@@ -755,7 +766,7 @@ namespace dst {
         auto [dists_r, trace_r] = dijkstra(adj, w_res, root);
         sssp_nodes_visited += dists_r->size();
 
-        auto [best, trace_t, sssp_t] = fast_level2_minden(dists_r, terms_left, w_res);
+        auto [best, trace_t, sssp_t] = fast_level2_minden(dists_r, terms_left, w_res, bound_mode);
         sssp_nodes_visited += sssp_t;
         par->trace_r = trace_r;
         par->trace_t = trace_t;

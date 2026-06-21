@@ -997,3 +997,106 @@ TEST_CASE("AdaptiveLevel2CenterIndex cached optimistic matches expected on multi
     CHECK(eq(r.density, (10.0 + 3 * 4.0) / 3));
   }
 }
+
+
+TEST_CASE("full_adaptive_fast_level2 with both bound modes") {
+  using namespace dst;
+
+  /*
+              11   12   13
+               ^    ^    ^
+            (2)|    |    |(2)
+               |    |    |
+               1    2    3
+               ^    ^    ^
+            (1)|    |    |(1)
+               |    |    |
+              <---+0+---+
+                    |
+                (2.5)
+                    v
+                    4+--(1)-->11
+                    +--(1)-->12
+                    +--(1)-->13
+  */
+  std::vector<std::pair<int,int>> edges {
+    {0,1}, {0,2}, {0,3}, {0,4},
+    {1,11}, {2,12}, {3,13},
+    {4,11}, {4,12}, {4,13}
+  };
+  std::vector<double> weights {1,1,1,2.5, 2,2,2, 1,1,1};
+  std::vector<int> terms {11,12,13};
+  DST dt = DST(edges, weights, 0, terms);
+
+  auto faf2_cheap = dt.full_adaptive_fast_level2_alg(Level2BoundMode::Cheap);
+  auto faf2_threshold = dt.full_adaptive_fast_level2_alg(Level2BoundMode::Threshold);
+
+  CHECK(eq(faf2_cheap->to_tree()->cost, 5.5));
+  CHECK(eq(faf2_threshold->to_tree()->cost, 5.5));
+  CHECK(eq(faf2_cheap->cost_sc, 5.5));
+  CHECK(eq(faf2_threshold->cost_sc, 5.5));
+}
+
+
+TEST_CASE("full_adaptive_fast_level2 bound modes on adaptive root distance graph") {
+  using namespace dst;
+
+  /*
+          0
+          |(4)
+          v
+          1+--(1)-->11
+          |(5)
+          v
+          2+--(1)-->21
+          +
+          |(1)
+          v
+         22
+  */
+  std::vector<std::pair<int,int>> edges {
+    {0,1}, {1,11}, {1,2}, {2,21}, {2,22}
+  };
+  std::vector<double> weights {4,1,5,1,1};
+  std::vector<int> terms {11,21,22};
+  DST dt = DST(edges, weights, 0, terms);
+
+  auto faf2_cheap = dt.full_adaptive_fast_level2_alg(Level2BoundMode::Cheap);
+  auto faf2_threshold = dt.full_adaptive_fast_level2_alg(Level2BoundMode::Threshold);
+
+  CHECK(eq(faf2_cheap->to_tree()->cost, 12));
+  CHECK(eq(faf2_threshold->to_tree()->cost, 12));
+  CHECK(eq(faf2_cheap->cost_sc, 12));
+  CHECK(eq(faf2_threshold->cost_sc, 12));
+}
+
+
+TEST_CASE("full_adaptive_fast_level2 bound modes on residual-path graph") {
+  using namespace dst;
+
+  /*
+    0---(1)-->1---(1)-->4---(1)-->6
+              +                   ^
+              |(2)               (1)
+              v                   |
+              2---(1)-->5---(1)-->3
+              +
+              |(3)
+              v
+              7
+  */
+  std::vector<std::pair<int,int>> edges {
+    {0,1}, {1,4}, {4,6},
+    {1,2}, {2,5}, {5,3}, {3,6},
+    {2,7}
+  };
+  std::vector<double> weights {1,1,1, 2,1,1,1, 3};
+  std::vector<int> terms {6,7};
+  DST dt = DST(edges, weights, 0, terms);
+
+  auto faf2_cheap = dt.full_adaptive_fast_level2_alg(Level2BoundMode::Cheap);
+  auto faf2_threshold = dt.full_adaptive_fast_level2_alg(Level2BoundMode::Threshold);
+
+  CHECK(eq(faf2_cheap->to_tree()->cost, faf2_threshold->to_tree()->cost));
+  CHECK(eq(faf2_cheap->cost_sc, faf2_threshold->cost_sc));
+}

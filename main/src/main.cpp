@@ -297,7 +297,10 @@ auto main(int argc, char** argv) -> int {
     debuginfo = &(partree->debuginfo);
   }
   else if (method.compare("full_adaptive_fast_level2") == 0) {
-    partree = dt.full_adaptive_fast_level2_alg();
+    if (level2_bound_explicit)
+      partree = dt.full_adaptive_fast_level2_alg(level2_bound_mode);
+    else
+      partree = dt.full_adaptive_fast_level2_alg();
     tree = partree->to_tree();
     debuginfo = &(partree->debuginfo);
   }
