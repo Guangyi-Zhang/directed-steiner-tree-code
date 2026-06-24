@@ -78,11 +78,6 @@ The main experiment binary accepts `level1`, `adaptive_level1`, `level2`,
 terminal-side distances are discovered progressively and reused while each
 greedy iteration refreshes only the root-side distances.
 
-The `--level2-bound` option selects the optimistic lower-bound mode used by
-`fast_level2`, `adaptive_fast_level2`, and `full_adaptive_fast_level2`:
-
-- `threshold` (default for all algorithms): constant-time bound.
-- `cheap`: also constant-time bound, but looser than Threshold mode.
 
 ## Tests
 

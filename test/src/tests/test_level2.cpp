@@ -152,7 +152,7 @@ TEST_CASE("AdaptiveLevel2CenterIndex builds threshold prefix and erases") {
 }
 
 
-TEST_CASE("AdaptiveLevel2CenterIndex optimistic bound handles undiscovered tail") {
+TEST_CASE("AdaptiveLevel2CenterIndex certificate handles undiscovered tail") {
   using namespace dst;
 
   AdaptiveLevel2CenterIndex idx {5, 3};
@@ -162,10 +162,14 @@ TEST_CASE("AdaptiveLevel2CenterIndex optimistic bound handles undiscovered tail"
   CHECK(discovered.nterm == 1);
   CHECK(eq(discovered.density, 12));
 
+  // Full-tail case: unseen terminals are cheap enough to possibly improve the
+  // prefix, so the certificate uses the full-tail lower bound.
   auto optimistic = idx.optimistic_bound(10, 3, 3, false);
   CHECK(optimistic.nterm == 3);
   CHECK(eq(optimistic.density, 6));
 
+  // Exhausted terminal search: no unseen terminals remain, so the discovered
+  // best prefix is exact.
   auto exhausted = idx.optimistic_bound(10, 3, 3, true);
   CHECK(exhausted.nterm == 1);
   CHECK(eq(exhausted.density, 12));
@@ -561,7 +565,7 @@ TEST_CASE("best_level2_prefix_length with plain vector thresholds") {
 }
 
 
-TEST_CASE("Level2CenterIndex Threshold mode returns best prefix") {
+TEST_CASE("Level2CenterIndex ready center certifies the discovered prefix") {
   using namespace dst;
   Level2CenterIndex idx(0, 1, 1.0);
   idx.add_term(101, 1);
@@ -569,9 +573,41 @@ TEST_CASE("Level2CenterIndex Threshold mode returns best prefix") {
   idx.add_term(103, 4);
 
   // After adding 103, tree becomes ready with prefix {101,102}, cost_sc=4.
-  auto bound = idx.optimistic_bound(1.0, 3, 0, true, Level2BoundMode::Threshold);
+  // The discovered rejected terminal (103) proves the prefix is exact, so the
+  // certificate uses the current prefix density regardless of the tail.
+  auto bound = idx.optimistic_bound(1.0, 3, 0, true);
   CHECK(bound.nterm == 2);
   CHECK(eq(bound.density, 2.0));
+}
+
+
+TEST_CASE("Level2CenterIndex certificate chooses current prefix when tail expensive") {
+  using namespace dst;
+  Level2CenterIndex idx(0, 1, 1.0);
+  idx.add_term(11, 1);
+  // Not ready, m=1, cost_sc=2. k=3, terminal_lb=10.
+  // current prefix density = 2/1 = 2
+  // full tail density = (2 + 2*10)/3 = 22/3 ~ 7.33
+  // Expensive frontier: every unseen terminal (>= 10) is too expensive to
+  // improve the current prefix, so the certificate uses the current prefix.
+  auto bound = idx.optimistic_bound(1.0, 3, 10, false);
+  CHECK(bound.nterm == 1);
+  CHECK(eq(bound.density, 2.0));
+}
+
+
+TEST_CASE("Level2CenterIndex certificate chooses full tail when tail cheap") {
+  using namespace dst;
+  Level2CenterIndex idx(0, 1, 5.0);
+  idx.add_term(11, 1);
+  // Not ready, m=1, cost_sc=6. k=3, terminal_lb=1.
+  // current prefix density = 6/1 = 6
+  // full tail density = (6 + 2*1)/3 = 8/3 ~ 2.67
+  // Cheap tail: unseen terminals could still improve the prefix, so the
+  // certificate uses the full-tail lower bound (lem:level2-density-LB).
+  auto bound = idx.optimistic_bound(5.0, 3, 1, false);
+  CHECK(bound.nterm == 3);
+  CHECK(eq(bound.density, 8.0 / 3));
 }
 
 
@@ -586,14 +622,16 @@ TEST_CASE("Level2CenterIndex erase_and_reset preserves resume") {
   idx.erase_and_reset({11});
   CHECK(idx.tree.terms.count(12) == 1); // contains 12
 
-  auto lb_cheap = idx.optimistic_bound(1.0, 4, 1.0, false, Level2BoundMode::Cheap);
-  auto lb_thr = idx.optimistic_bound(1.0, 4, 1.0, false, Level2BoundMode::Threshold);
-  CHECK(lb_cheap.density > 0);
-  CHECK(lb_thr.density > 0);
+  // After erasing 11: prefix is {12}, cost_sc=3, ready. The discovered rejected
+  // terminal 13 certifies the prefix exactly, so the certificate uses the
+  // current prefix density regardless of the tail (terminals exhausted here).
+  auto bound = idx.optimistic_bound(1.0, 4, 1.0, false);
+  CHECK(bound.nterm == 1);
+  CHECK(eq(bound.density, 3.0));
 }
 
 
-TEST_CASE("Level2CenterIndex zero_drv preserves threshold state") {
+TEST_CASE("Level2CenterIndex zero_drv preserves certificate state") {
   using namespace dst;
   Level2CenterIndex idx(0, 1, 5.0);
   idx.add_term(11, 1);
@@ -604,42 +642,14 @@ TEST_CASE("Level2CenterIndex zero_drv preserves threshold state") {
   // After zero_drv with d_rv=5: cost_sc resets to 0 and re-adds terminals.
   // Re-add 11 (d=1): cost_sc=1, density=1. Re-add 12 (d=2): new_den=1.5 > 1,
   // so tree becomes ready with prefix {11}, cost_sc=1.
-  auto bound = idx.optimistic_bound(0.0, 2, 0, true, Level2BoundMode::Threshold);
+  auto bound = idx.optimistic_bound(0.0, 2, 0, true);
   CHECK(bound.nterm == 1);
   CHECK(eq(bound.density, 1.0));
 
   // Same result regardless of d_rv parameter (d_rv is baked into cost_sc).
-  auto bound2 = idx.optimistic_bound(1.0, 2, 0, true, Level2BoundMode::Threshold);
+  auto bound2 = idx.optimistic_bound(1.0, 2, 0, true);
   CHECK(bound2.nterm == 1);
   CHECK(eq(bound2.density, 1.0));
-}
-
-
-TEST_CASE("Level2CenterIndex Threshold chooses current prefix when tail expensive") {
-  using namespace dst;
-  Level2CenterIndex idx(0, 1, 1.0);
-  idx.add_term(11, 1);
-  // Not ready, m=1, cost_sc=2. k=3, terminal_lb=10.
-  // current prefix density = 2/1 = 2
-  // full tail density = (2 + 2*10)/3 = 22/3 ≈ 7.33
-  // m*lb = 10 > C = 2, so current prefix wins.
-  auto bound = idx.optimistic_bound(1.0, 3, 10, false, Level2BoundMode::Threshold);
-  CHECK(bound.nterm == 1);
-  CHECK(eq(bound.density, 2.0));
-}
-
-
-TEST_CASE("Level2CenterIndex Threshold chooses full tail when tail cheap") {
-  using namespace dst;
-  Level2CenterIndex idx(0, 1, 5.0);
-  idx.add_term(11, 1);
-  // Not ready, m=1, cost_sc=6. k=3, terminal_lb=1.
-  // current prefix density = 6/1 = 6
-  // full tail density = (6 + 2*1)/3 = 8/3 ≈ 2.67
-  // m*lb = 1 <= C = 6, so full tail wins.
-  auto bound = idx.optimistic_bound(5.0, 3, 1, false, Level2BoundMode::Threshold);
-  CHECK(bound.nterm == 3);
-  CHECK(eq(bound.density, 8.0 / 3));
 }
 
 
@@ -685,38 +695,42 @@ TEST_CASE("Level2CenterIndex add_term ignores dead terminals") {
 }
 
 
-TEST_CASE("AdaptiveLevel2CenterIndex Cheap vs Threshold mode") {
+TEST_CASE("AdaptiveLevel2CenterIndex certificate uses full tail when all discovered") {
   using namespace dst;
   AdaptiveLevel2CenterIndex idx {5, 4};
   idx.insert(201, 2);
   idx.insert(202, 3);
 
-  auto cheap = idx.optimistic_bound(10, 4, 1, false, Level2BoundMode::Cheap);
-  auto threshold = idx.optimistic_bound(10, 4, 1, false, Level2BoundMode::Threshold);
-
-  CHECK(eq(cheap.density, (10.0 + 2 + 3 + 2*1.0) / 4));
-  CHECK(cheap.nterm == 4);
-  CHECK(leq(threshold.density, cheap.density));
+  // cached prefix at d_rv=10 uses both discovered terminals (nterm=m=2).
+  // total_alive=4, unknown=2, terminal_lb=1.
+  // current_density = (10 + 2 + 3) / 2 = 7.5
+  // full_density = (10 + 2 + 3 + 2*1) / 4 = 4.25
+  // Full tail is cheaper, so the certificate uses the full-tail lower bound.
+  idx.discovered_bound(10);
+  auto bound = idx.optimistic_bound(10, 4, 1, false);
+  CHECK(bound.nterm == 4);
+  CHECK(eq(bound.density, (10.0 + 2 + 3 + 2*1.0) / 4));
 }
 
 
-TEST_CASE("AdaptiveLevel2CenterIndex both modes match when search exhausted") {
+TEST_CASE("AdaptiveLevel2CenterIndex certificate is exact when search exhausted") {
   using namespace dst;
   AdaptiveLevel2CenterIndex idx {5, 3};
   idx.insert(201, 2);
   idx.insert(202, 3);
   idx.insert(203, 5);
 
-  auto cheap = idx.optimistic_bound(10, 3, 0, true, Level2BoundMode::Cheap);
-  auto threshold = idx.optimistic_bound(10, 3, 0, true, Level2BoundMode::Threshold);
-
-  CHECK(cheap.nterm == 3);
-  CHECK(threshold.nterm == 3);
-  CHECK(eq(threshold.density, cheap.density));
+  // Exhausted terminal search: no unseen terminals remain, so the discovered
+  // best prefix is exact. At d_rv=10 every discovered terminal is taken:
+  // theta(1)=1*3-2=1<=10, theta(2)=2*5-5=5<=10, so the prefix uses all three.
+  idx.discovered_bound(10);
+  auto bound = idx.optimistic_bound(10, 3, 0, true);
+  CHECK(bound.nterm == 3);
+  CHECK(eq(bound.density, (10.0 + 2 + 3 + 5) / 3));
 }
 
 
-TEST_CASE("fast_level2 and adaptive_fast_level2 with both bound modes") {
+TEST_CASE("fast_level2 and adaptive_fast_level2 single behavior") {
   using namespace dst;
 
   /*
@@ -737,7 +751,6 @@ TEST_CASE("fast_level2 and adaptive_fast_level2 with both bound modes") {
                     +--(1)-->13
 
     Optimal tree: 0->4 (2.5) plus 4->{11,12,13} (1 each), cost 5.5.
-    Cheap and Threshold bound modes agree on this instance.
   */
   std::vector<std::pair<int,int>> edges {
     {0,1}, {0,2}, {0,3}, {0,4},
@@ -748,24 +761,17 @@ TEST_CASE("fast_level2 and adaptive_fast_level2 with both bound modes") {
   std::vector<int> terms {11,12,13};
   DST dt = DST(edges, weights, 0, terms);
 
-  auto f2_cheap = dt.fast_level2_alg(Level2BoundMode::Cheap);
-  auto f2_threshold = dt.fast_level2_alg(Level2BoundMode::Threshold);
-  auto af2_cheap = dt.adaptive_fast_level2_alg(Level2BoundMode::Cheap);
-  auto af2_threshold = dt.adaptive_fast_level2_alg(Level2BoundMode::Threshold);
+  auto f2 = dt.fast_level2_alg();
+  auto af2 = dt.adaptive_fast_level2_alg();
 
-  CHECK(eq(f2_cheap->to_tree()->cost, 5.5));
-  CHECK(eq(f2_threshold->to_tree()->cost, 5.5));
-  CHECK(eq(af2_cheap->to_tree()->cost, 5.5));
-  CHECK(eq(af2_threshold->to_tree()->cost, 5.5));
-
-  CHECK(eq(f2_cheap->cost_sc, 5.5));
-  CHECK(eq(f2_threshold->cost_sc, 5.5));
-  CHECK(eq(af2_cheap->cost_sc, 5.5));
-  CHECK(eq(af2_threshold->cost_sc, 5.5));
+  CHECK(eq(f2->to_tree()->cost, 5.5));
+  CHECK(eq(af2->to_tree()->cost, 5.5));
+  CHECK(eq(f2->cost_sc, 5.5));
+  CHECK(eq(af2->cost_sc, 5.5));
 }
 
 
-TEST_CASE("bound modes on adaptive root distance graph") {
+TEST_CASE("single behavior on adaptive root distance graph") {
   using namespace dst;
 
   /*
@@ -783,7 +789,7 @@ TEST_CASE("bound modes on adaptive root distance graph") {
 
     fast_level2 keeps root-side distance 9 to vertex 2, so cost_sc=16.
     adaptive_fast_level2 pays marginal cost 5 after covering 11, so cost_sc=12.
-    All variants build the same final tree (cost 12). Cheap and Threshold agree.
+    Both build the same final tree (cost 12).
   */
   std::vector<std::pair<int,int>> edges {
     {0,1}, {1,11}, {1,2}, {2,21}, {2,22}
@@ -792,20 +798,13 @@ TEST_CASE("bound modes on adaptive root distance graph") {
   std::vector<int> terms {11,21,22};
   DST dt = DST(edges, weights, 0, terms);
 
-  auto f2_cheap = dt.fast_level2_alg(Level2BoundMode::Cheap);
-  auto f2_threshold = dt.fast_level2_alg(Level2BoundMode::Threshold);
-  auto af2_cheap = dt.adaptive_fast_level2_alg(Level2BoundMode::Cheap);
-  auto af2_threshold = dt.adaptive_fast_level2_alg(Level2BoundMode::Threshold);
+  auto f2 = dt.fast_level2_alg();
+  auto af2 = dt.adaptive_fast_level2_alg();
 
-  CHECK(eq(f2_cheap->cost_sc, 16));
-  CHECK(eq(f2_threshold->cost_sc, 16));
-  CHECK(eq(af2_cheap->cost_sc, 12));
-  CHECK(eq(af2_threshold->cost_sc, 12));
-
-  CHECK(eq(f2_cheap->to_tree()->cost, 12));
-  CHECK(eq(f2_threshold->to_tree()->cost, 12));
-  CHECK(eq(af2_cheap->to_tree()->cost, 12));
-  CHECK(eq(af2_threshold->to_tree()->cost, 12));
+  CHECK(eq(f2->cost_sc, 16));
+  CHECK(eq(af2->cost_sc, 12));
+  CHECK(eq(f2->to_tree()->cost, 12));
+  CHECK(eq(af2->to_tree()->cost, 12));
 }
 
 
@@ -830,7 +829,7 @@ TEST_CASE("AdaptiveLevel2CenterIndex cached discovered bound matches binary sear
 }
 
 
-TEST_CASE("AdaptiveLevel2CenterIndex Threshold cached prefix stops early ignores unknown") {
+TEST_CASE("AdaptiveLevel2CenterIndex cached prefix stops early ignores unknown") {
   using namespace dst;
 
   AdaptiveLevel2CenterIndex idx {5, 5};
@@ -843,13 +842,13 @@ TEST_CASE("AdaptiveLevel2CenterIndex Threshold cached prefix stops early ignores
 
   // Unknown terminals at terminal_lb = 7 >= w_3 = 6:
   // prefix stops early at nterm=2, unknown tail cannot help.
-  auto bound = idx.optimistic_bound(4.0, 5, 7.0, false, Level2BoundMode::Threshold);
+  auto bound = idx.optimistic_bound(4.0, 5, 7.0, false);
   CHECK(bound.nterm == 2);
   CHECK(eq(bound.density, 4.0));
 }
 
 
-TEST_CASE("AdaptiveLevel2CenterIndex Threshold cached prefix full, cheap tail wins") {
+TEST_CASE("AdaptiveLevel2CenterIndex cached prefix full, cheap tail wins") {
   using namespace dst;
 
   AdaptiveLevel2CenterIndex idx {5, 3};
@@ -862,13 +861,13 @@ TEST_CASE("AdaptiveLevel2CenterIndex Threshold cached prefix full, cheap tail wi
   // current_density = (10+2)/1 = 12
   // full_density = (10+2+2*3)/3 = 6
   // full tail wins.
-  auto bound = idx.optimistic_bound(10.0, 3, 3.0, false, Level2BoundMode::Threshold);
+  auto bound = idx.optimistic_bound(10.0, 3, 3.0, false);
   CHECK(bound.nterm == 3);
   CHECK(eq(bound.density, 6.0));
 }
 
 
-TEST_CASE("AdaptiveLevel2CenterIndex Threshold cached prefix full, expensive tail loses") {
+TEST_CASE("AdaptiveLevel2CenterIndex cached prefix full, expensive tail loses") {
   using namespace dst;
 
   AdaptiveLevel2CenterIndex idx {5, 3};
@@ -881,7 +880,7 @@ TEST_CASE("AdaptiveLevel2CenterIndex Threshold cached prefix full, expensive tai
   // current_density = (1+1)/1 = 2
   // full_density = (1+1+2*10)/3 = 22/3 ~ 7.33
   // current prefix wins.
-  auto bound = idx.optimistic_bound(1.0, 3, 10.0, false, Level2BoundMode::Threshold);
+  auto bound = idx.optimistic_bound(1.0, 3, 10.0, false);
   CHECK(bound.nterm == 1);
   CHECK(eq(bound.density, 2.0));
 }
@@ -935,17 +934,17 @@ TEST_CASE("AdaptiveLevel2CenterIndex erase invalidates cache, refresh restores")
 }
 
 
-TEST_CASE("AdaptiveLevel2CenterIndex cached optimistic matches expected on multiple configs") {
+TEST_CASE("AdaptiveLevel2CenterIndex certificate matches expected on multiple configs") {
   using namespace dst;
 
   {
-    // Config 1: early stop, unknown tail ignored
+    // Config 1: cached prefix stops early, unknown tail ignored
     AdaptiveLevel2CenterIndex idx {5, 5};
     idx.insert(100, 1);
     idx.insert(101, 3);
     idx.insert(102, 6);
     idx.discovered_bound(4.0);
-    auto r = idx.optimistic_bound(4.0, 5, 7.0, false, Level2BoundMode::Threshold);
+    auto r = idx.optimistic_bound(4.0, 5, 7.0, false);
     CHECK(r.nterm == 2);
     CHECK(eq(r.density, 4.0));
   }
@@ -955,7 +954,7 @@ TEST_CASE("AdaptiveLevel2CenterIndex cached optimistic matches expected on multi
     AdaptiveLevel2CenterIndex idx {5, 3};
     idx.insert(100, 2);
     idx.discovered_bound(10.0);
-    auto r = idx.optimistic_bound(10.0, 3, 3.0, false, Level2BoundMode::Threshold);
+    auto r = idx.optimistic_bound(10.0, 3, 3.0, false);
     CHECK(r.nterm == 3);
     CHECK(eq(r.density, 6.0));
   }
@@ -965,7 +964,7 @@ TEST_CASE("AdaptiveLevel2CenterIndex cached optimistic matches expected on multi
     AdaptiveLevel2CenterIndex idx {5, 3};
     idx.insert(100, 1);
     idx.discovered_bound(1.0);
-    auto r = idx.optimistic_bound(1.0, 3, 10.0, false, Level2BoundMode::Threshold);
+    auto r = idx.optimistic_bound(1.0, 3, 10.0, false);
     CHECK(r.nterm == 1);
     CHECK(eq(r.density, 2.0));
   }
@@ -977,7 +976,7 @@ TEST_CASE("AdaptiveLevel2CenterIndex cached optimistic matches expected on multi
     idx.insert(101, 2);
     idx.insert(102, 4);
     idx.discovered_bound(1.0);
-    auto r = idx.optimistic_bound(1.0, 3, 0, true, Level2BoundMode::Threshold);
+    auto r = idx.optimistic_bound(1.0, 3, 0, true);
     CHECK(r.nterm == 2);
     CHECK(eq(r.density, 2.0));
   }
@@ -985,21 +984,21 @@ TEST_CASE("AdaptiveLevel2CenterIndex cached optimistic matches expected on multi
   {
     // Config 5: no terminals at all
     AdaptiveLevel2CenterIndex idx {5, 3};
-    auto r = idx.optimistic_bound(10.0, 0, 5.0, false, Level2BoundMode::Threshold);
+    auto r = idx.optimistic_bound(10.0, 0, 5.0, false);
     CHECK(r.nterm == 0);
   }
 
   {
     // Config 6: no discovered, all unknown
     AdaptiveLevel2CenterIndex idx {5, 3};
-    auto r = idx.optimistic_bound(10.0, 3, 4.0, false, Level2BoundMode::Threshold);
+    auto r = idx.optimistic_bound(10.0, 3, 4.0, false);
     CHECK(r.nterm == 3);
     CHECK(eq(r.density, (10.0 + 3 * 4.0) / 3));
   }
 }
 
 
-TEST_CASE("full_adaptive_fast_level2 with both bound modes") {
+TEST_CASE("full_adaptive_fast_level2 single behavior") {
   using namespace dst;
 
   /*
@@ -1028,17 +1027,14 @@ TEST_CASE("full_adaptive_fast_level2 with both bound modes") {
   std::vector<int> terms {11,12,13};
   DST dt = DST(edges, weights, 0, terms);
 
-  auto faf2_cheap = dt.full_adaptive_fast_level2_alg(Level2BoundMode::Cheap);
-  auto faf2_threshold = dt.full_adaptive_fast_level2_alg(Level2BoundMode::Threshold);
+  auto faf2 = dt.full_adaptive_fast_level2_alg();
 
-  CHECK(eq(faf2_cheap->to_tree()->cost, 5.5));
-  CHECK(eq(faf2_threshold->to_tree()->cost, 5.5));
-  CHECK(eq(faf2_cheap->cost_sc, 5.5));
-  CHECK(eq(faf2_threshold->cost_sc, 5.5));
+  CHECK(eq(faf2->to_tree()->cost, 5.5));
+  CHECK(eq(faf2->cost_sc, 5.5));
 }
 
 
-TEST_CASE("full_adaptive_fast_level2 bound modes on adaptive root distance graph") {
+TEST_CASE("full_adaptive_fast_level2 on adaptive root distance graph") {
   using namespace dst;
 
   /*
@@ -1061,17 +1057,14 @@ TEST_CASE("full_adaptive_fast_level2 bound modes on adaptive root distance graph
   std::vector<int> terms {11,21,22};
   DST dt = DST(edges, weights, 0, terms);
 
-  auto faf2_cheap = dt.full_adaptive_fast_level2_alg(Level2BoundMode::Cheap);
-  auto faf2_threshold = dt.full_adaptive_fast_level2_alg(Level2BoundMode::Threshold);
+  auto faf2 = dt.full_adaptive_fast_level2_alg();
 
-  CHECK(eq(faf2_cheap->to_tree()->cost, 12));
-  CHECK(eq(faf2_threshold->to_tree()->cost, 12));
-  CHECK(eq(faf2_cheap->cost_sc, 12));
-  CHECK(eq(faf2_threshold->cost_sc, 12));
+  CHECK(eq(faf2->to_tree()->cost, 12));
+  CHECK(eq(faf2->cost_sc, 12));
 }
 
 
-TEST_CASE("full_adaptive_fast_level2 bound modes on residual-path graph") {
+TEST_CASE("full_adaptive_fast_level2 on residual-path graph") {
   using namespace dst;
 
   /*
@@ -1094,9 +1087,10 @@ TEST_CASE("full_adaptive_fast_level2 bound modes on residual-path graph") {
   std::vector<int> terms {6,7};
   DST dt = DST(edges, weights, 0, terms);
 
-  auto faf2_cheap = dt.full_adaptive_fast_level2_alg(Level2BoundMode::Cheap);
-  auto faf2_threshold = dt.full_adaptive_fast_level2_alg(Level2BoundMode::Threshold);
+  auto fast2 = dt.fast_level2_alg();
+  auto faf2 = dt.full_adaptive_fast_level2_alg();
 
-  CHECK(eq(faf2_cheap->to_tree()->cost, faf2_threshold->to_tree()->cost));
-  CHECK(eq(faf2_cheap->cost_sc, faf2_threshold->cost_sc));
+  // full_adaptive reuses arcs on both sides, so it must do no worse than fast.
+  CHECK(leq(faf2->cost_sc, fast2->cost_sc));
+  CHECK(eq(faf2->to_tree()->cost, faf2->cost_sc));
 }

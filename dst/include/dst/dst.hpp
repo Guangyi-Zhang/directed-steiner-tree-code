@@ -162,7 +162,7 @@ namespace dst {
     }
 
 
-    auto fast_level2_alg(Level2BoundMode bound_mode = Level2BoundMode::Threshold) {
+    auto fast_level2_alg() {
       // dijktra from the root
       auto [dists_r, trace_r] = dijkstra(adj, w, root);
 
@@ -259,7 +259,7 @@ namespace dst {
         // compare UB with LBs, remove as many LBs as possible
         while (not LBs.empty()) {
           auto &idx_lb = center_idxs.at(LBs.front());
-          auto lb = idx_lb.optimistic_bound(idx_lb.tree.d_rv, k, d_vt, false, bound_mode);
+          auto lb = idx_lb.optimistic_bound(idx_lb.tree.d_rv, k, d_vt, false);
           if (idx_lb.tree.ready or leq(idx_best.density(), lb.density)) {
             if (DEBUG) fmt::println("prune v={}, density={}, terms={}", idx_lb.tree.v, idx_lb.density(), idx_lb.tree.terms);
             if (DEBUG_fast_level2) strtest += std::to_string(idx_lb.tree.v) + ":" + std::to_string(lb.density) + ",";
@@ -506,8 +506,7 @@ namespace dst {
     auto fast_level2_minden(
         std::shared_ptr<std::unordered_map<int,double>> dists_r,
         const std::unordered_set<int> &terms_left,
-        const std::unordered_map<std::pair<int,int>, double, boost::hash<std::pair<int,int>>> &edgeweight,
-        Level2BoundMode bound_mode = Level2BoundMode::Cheap
+        const std::unordered_map<std::pair<int,int>, double, boost::hash<std::pair<int,int>>> &edgeweight
     ) {
       // init a Level2CenterIndex for each v reachable from root
       std::unordered_map<int, Level2CenterIndex> center_idxs;
@@ -575,7 +574,7 @@ namespace dst {
         int k = terms_left.size();
         for (auto it = LBs.begin(); it != LBs.end(); ) {
           auto &idx_lb = center_idxs.at(*it);
-          auto lb = idx_lb.optimistic_bound(idx_lb.tree.d_rv, k, d_vt, false, bound_mode);
+          auto lb = idx_lb.optimistic_bound(idx_lb.tree.d_rv, k, d_vt, false);
           if (idx_lb.tree.ready or leq(idx_best.density(), lb.density)) {
             it = LBs.erase(it); // safe only for list
           } else {
@@ -612,7 +611,7 @@ namespace dst {
     // Root-adaptive fast level-2: fixed terminal-side distances, dynamic root-side
     // distances. One persistent backward CoordinatedDijkstra; per-center Fenwick
     // indexes maintain best terminal prefixes as discoveries arrive.
-    auto adaptive_fast_level2_alg(Level2BoundMode bound_mode = Level2BoundMode::Threshold) {
+    auto adaptive_fast_level2_alg() {
       auto par = std::make_shared<PartialTreeManager> (root);
       par->trace_t = nullptr;
       std::unordered_set<int> terms_left(terms_dm.begin(), terms_dm.end());
@@ -645,7 +644,7 @@ namespace dst {
       };
 
       auto bound_can_beat = [&](
-          const Level2PrefixBound &bound,
+          const Level2PruneBound &bound,
           double best_density,
           int best_nterm
       ) {
@@ -699,8 +698,7 @@ namespace dst {
                   dists_r->at(v),
                   terms_left.size(),
                   terminal_lb,
-                  terminal_search_exhausted,
-                  bound_mode
+                  terminal_search_exhausted
               );
               if (bound_can_beat(bound, best_density, best_nterm))
                 break; // not yet certified
@@ -756,7 +754,7 @@ namespace dst {
     }
 
 
-    auto full_adaptive_fast_level2_alg(Level2BoundMode bound_mode = Level2BoundMode::Threshold) {
+    auto full_adaptive_fast_level2_alg() {
       auto par = std::make_shared<PartialTreeManager> (root);
       std::unordered_set<int> terms_left(terms_dm.begin(), terms_dm.end());
       int sssp_nodes_visited = 0;
@@ -766,7 +764,7 @@ namespace dst {
         auto [dists_r, trace_r] = dijkstra(adj, w_res, root);
         sssp_nodes_visited += dists_r->size();
 
-        auto [best, trace_t, sssp_t] = fast_level2_minden(dists_r, terms_left, w_res, bound_mode);
+        auto [best, trace_t, sssp_t] = fast_level2_minden(dists_r, terms_left, w_res);
         sssp_nodes_visited += sssp_t;
         par->trace_r = trace_r;
         par->trace_t = trace_t;

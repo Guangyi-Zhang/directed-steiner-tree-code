@@ -16,11 +16,11 @@
 
 namespace dst {
 
-  // Cheap: assume all undiscovered terminals cost terminal_lb.
-  // Threshold: compare discovered prefix vs full optimistic tail (stronger, still O(1)).
-  enum class Level2BoundMode { Cheap, Threshold };
-
-  struct Level2PrefixBound {
+  // Result of a level-2 pruning certificate for one center: the smallest prefix
+  // density this center could still achieve given what is known so far. The
+  // greedy loop prunes a center as soon as the current best density does not
+  // exceed its certificate density.
+  struct Level2PruneBound {
     double density {std::numeric_limits<double>::max()};
     int nterm {0};
   };
@@ -303,7 +303,7 @@ namespace dst {
   };
 
 
-  // Per-center index for fast level-2: wraps PartialTree with closed-form threshold mode.
+  // Per-center index for fast level-2: wraps PartialTree with an O(1) pruning certificate.
   class Level2CenterIndex {
     public:
     PartialTree tree;
@@ -334,22 +334,21 @@ namespace dst {
 
     bool is_ready(double d_LB = -1) { return tree.is_ready(d_LB); }
 
-    Level2PrefixBound optimistic_bound(
+    Level2PruneBound optimistic_bound(
         double /*d_rv, unused*/,
         int total_alive_terms,
         double terminal_lb,
-        bool terminal_search_exhausted,
-        Level2BoundMode mode
+        bool terminal_search_exhausted
     ) const {
       int k = total_alive_terms;
       if (k == 0)
-        return Level2PrefixBound {};
+        return Level2PruneBound {};
 
       int m = static_cast<int>(tree.terms.size());
       double C = tree.cost_sc;
 
       if (tree.ready) {
-        Level2PrefixBound bound;
+        Level2PruneBound bound;
         bound.density = C / m;
         bound.nterm = m;
         return bound;
@@ -359,32 +358,23 @@ namespace dst {
       int unknown = terminal_search_exhausted ? 0 : std::max(0, k - m);
 
       if (m == 0) {
-        Level2PrefixBound bound;
+        Level2PruneBound bound;
         bound.density = (C + k * terminal_lb) / k;
         bound.nterm = k;
         return bound;
       }
 
       if (unknown == 0) {
-        Level2PrefixBound bound;
+        Level2PruneBound bound;
         bound.density = C / m;
         bound.nterm = m;
         return bound;
       }
 
-      // m > 0, unknown > 0: Cheap fills the tail; Threshold picks the better.
+      double current_density = C / m;
       double full_density = (C + unknown * terminal_lb) / k;
 
-      if (mode == Level2BoundMode::Cheap) {
-        Level2PrefixBound bound;
-        bound.density = full_density;
-        bound.nterm = k;
-        return bound;
-      }
-
-      // Threshold: full tail beats current prefix iff m * lb <= C.
-      double current_density = C / m;
-      Level2PrefixBound bound;
+      Level2PruneBound bound;
       if (leq(full_density, current_density)) {
         bound.density = full_density;
         bound.nterm = k;
@@ -519,11 +509,11 @@ namespace dst {
     }
 
     // Density bound using only discovered alive terminals (uses cached prefix).
-    Level2PrefixBound discovered_bound(double d_rv) {
+    Level2PruneBound discovered_bound(double d_rv) {
       if (!cache_valid || !eq(cached_d_rv, d_rv))
         refresh_cache(d_rv);
 
-      Level2PrefixBound bound;
+      Level2PruneBound bound;
       if (cached_nterm == 0)
         return bound;
 
@@ -532,7 +522,7 @@ namespace dst {
       return bound;
     }
 
-    // Optimistic density lower bound for this center.
+    // Pruning certificate for this center.
     //
     // Discovered alive terminals have exact d(v,t) values in rank order. Any
     // undiscovered alive terminal has not been popped from the global
@@ -541,12 +531,11 @@ namespace dst {
     // exactly terminal_lb, what is the best prefix density this center could
     // still achieve? If that optimistic density cannot beat the current best,
     // this center is safe to discard for the current greedy iteration.
-    Level2PrefixBound optimistic_bound(
+    Level2PruneBound optimistic_bound(
         double d_rv,
         int total_alive_terms,
         double terminal_lb,
-        bool terminal_search_exhausted,
-        Level2BoundMode mode = Level2BoundMode::Threshold
+        bool terminal_search_exhausted
     ) {
       if (!cache_valid || !eq(cached_d_rv, d_rv))
         refresh_cache(d_rv);
@@ -555,29 +544,17 @@ namespace dst {
       int unknown = terminal_search_exhausted ? 0 : std::max(0, total_alive_terms - m);
       int total = m + unknown;
       if (total == 0)
-        return Level2PrefixBound {};
-
-      if (mode == Level2BoundMode::Cheap) {
-        Level2PrefixBound bound;
-        bound.nterm = total;
-        bound.density = (d_rv + w_alive + unknown * terminal_lb) / total;
-        return bound;
-      }
-
-      // Threshold mode: O(1) case split on cached best discovered prefix.
-      // If cached_nterm < m, unknown terminals (>= terminal_lb) cannot beat an
-      // already-rejected next discovered terminal. If cached_nterm == m, only two
-      // candidates remain: the discovered prefix vs adding all unknown at terminal_lb.
+        return Level2PruneBound {};
 
       if (m == 0) {
-        Level2PrefixBound bound;
+        Level2PruneBound bound;
         bound.nterm = total;
         bound.density = (d_rv + total * terminal_lb) / total;
         return bound;
       }
 
       if (unknown == 0) {
-        Level2PrefixBound bound;
+        Level2PruneBound bound;
         bound.nterm = cached_nterm;
         bound.density = cached_density;
         return bound;
@@ -587,7 +564,7 @@ namespace dst {
       if (cached_nterm < m) {
         // Best prefix stops early among discovered terminals.
         // Unknown terminals are at least as expensive, so they cannot help.
-        Level2PrefixBound bound;
+        Level2PruneBound bound;
         bound.nterm = cached_nterm;
         bound.density = cached_density;
         return bound;
@@ -597,7 +574,7 @@ namespace dst {
       // Compare cached discovered density with full optimistic tail density.
       double full_density = (d_rv + w_alive + unknown * terminal_lb) / total;
 
-      Level2PrefixBound bound;
+      Level2PruneBound bound;
       if (leq(full_density, cached_density)) {
         bound.density = full_density;
         bound.nterm = total;

@@ -43,7 +43,6 @@ auto main(int argc, char** argv) -> int {
     ("n,thresholds", "thresholds", cxxopts::value<int>()->default_value("10"))
     ("t,note", "note", cxxopts::value<std::string>()->default_value("none"))
     ("l,logfile", "log file", cxxopts::value<std::string>()->default_value("logs/basic-log.txt"))
-    ("level2-bound", "level2 bound mode: cheap|threshold", cxxopts::value<std::string>()->default_value("default"))
   ;
   auto opresult = options.parse(argc, argv);
 
@@ -60,17 +59,6 @@ auto main(int argc, char** argv) -> int {
   int rep = opresult["rep"].as<int>();
   int version = opresult["version"].as<int>();
   int seed = opresult["seed"].as<int>();
-  std::string level2_bound_str = opresult["level2-bound"].as<std::string>();
-  dst::Level2BoundMode level2_bound_mode = dst::Level2BoundMode::Cheap;
-  bool level2_bound_explicit = (level2_bound_str != "default");
-  if (level2_bound_str == "cheap")
-    level2_bound_mode = dst::Level2BoundMode::Cheap;
-  else if (level2_bound_str == "threshold")
-    level2_bound_mode = dst::Level2BoundMode::Threshold;
-  else if (level2_bound_str != "default") {
-    std::cerr << "unknown --level2-bound value: " << level2_bound_str << std::endl;
-    return 1;
-  }
 
   if (seed == -1)
     seed = time(nullptr);
@@ -284,10 +272,7 @@ auto main(int argc, char** argv) -> int {
     debuginfo = &(partree->debuginfo);
   }
   else if (method.compare("adaptive_fast_level2") == 0 or method.compare("root_adaptive_fast_level2") == 0) {
-    if (level2_bound_explicit)
-      partree = dt.adaptive_fast_level2_alg(level2_bound_mode);
-    else
-      partree = dt.adaptive_fast_level2_alg();
+    partree = dt.adaptive_fast_level2_alg();
     tree = partree->to_tree();
     debuginfo = &(partree->debuginfo);
   }
@@ -297,18 +282,12 @@ auto main(int argc, char** argv) -> int {
     debuginfo = &(partree->debuginfo);
   }
   else if (method.compare("full_adaptive_fast_level2") == 0) {
-    if (level2_bound_explicit)
-      partree = dt.full_adaptive_fast_level2_alg(level2_bound_mode);
-    else
-      partree = dt.full_adaptive_fast_level2_alg();
+    partree = dt.full_adaptive_fast_level2_alg();
     tree = partree->to_tree();
     debuginfo = &(partree->debuginfo);
   }
   else if (method.compare("fast_level2") == 0) {
-    if (level2_bound_explicit)
-      partree = dt.fast_level2_alg(level2_bound_mode);
-    else
-      partree = dt.fast_level2_alg();
+    partree = dt.fast_level2_alg();
     tree = partree->to_tree();
     debuginfo = &(partree->debuginfo);
   }
@@ -354,11 +333,6 @@ auto main(int argc, char** argv) -> int {
   d.AddMember("dataset", rapidjson::Value(rapidjson::StringRef(dataset.c_str())), a); 
   d.AddMember("alpha", rapidjson::Value(alpha), a);
   d.AddMember("thresholds", rapidjson::Value(nthresholds), a);
-  {
-    rapidjson::Value vlevel2bound;
-    vlevel2bound.SetString(level2_bound_str.c_str(), level2_bound_str.length(), a);
-    d.AddMember("level2_bound", vlevel2bound, a);
-  } 
 
   d.AddMember("cost", rapidjson::Value(tree->cost), a); 
   d.AddMember("cost_sc", rapidjson::Value(tree->cost_sc), a); 
