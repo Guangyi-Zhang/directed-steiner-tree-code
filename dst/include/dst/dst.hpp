@@ -598,12 +598,14 @@ namespace dst {
             idx_best.tree.terms.size() < terms_left.size())
           continue;
 
+        #ifndef NO_FAST2_LB
         auto best = std::make_shared<PartialTree>();
         *best = idx_best.tree; // copy
         int sssp_nodes_visited = 0;
         for (auto &p: *(cosssp.distances_t))
           sssp_nodes_visited += p.second->size();
         return std::make_tuple(best, cosssp.trace_t, sssp_nodes_visited);
+        #endif
       }
     }
 
@@ -707,8 +709,11 @@ namespace dst {
               survivors.pop_front();
             }
 
-            if (survivors.empty())
+            if (survivors.empty()) {
+              #ifndef NO_FAST2_LB
               break; // no survivors, certified
+              #endif
+            }
           }
 
           if (terminal_search_exhausted)
