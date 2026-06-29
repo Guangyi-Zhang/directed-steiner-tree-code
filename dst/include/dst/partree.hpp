@@ -106,7 +106,12 @@ namespace dst {
       }
     }
 
-    void erase_and_reset(const std::unordered_set<int> &terms_del) {
+    void erase_and_reset(
+        const std::unordered_set<int> &terms_del,
+        const std::unordered_set<int> *terms_skip = nullptr
+    ) {
+      const auto &skip = terms_skip == nullptr ? terms_del : *terms_skip;
+
       if (&terms == &terms_del) { // erase itself
         for (auto t: terms_del) {
           cost_sc -= distances_t.at(t);
@@ -129,7 +134,7 @@ namespace dst {
         auto t = terms_after_ready.front();
         terms_after_ready.pop_front();
 
-        if (has_key(terms_del, t)) 
+        if (has_key(skip, t))
           continue;
 
         add_term(t, distances_t.at(t));
@@ -307,23 +312,42 @@ namespace dst {
   class Level2CenterIndex {
     public:
     PartialTree tree;
-    std::unordered_set<int> dead_terms;
+    std::shared_ptr<std::unordered_set<int>> owned_dead_terms;
+    std::shared_ptr<const std::unordered_set<int>> dead_terms;
 
-    Level2CenterIndex() {};
+    Level2CenterIndex() :
+        owned_dead_terms {std::make_shared<std::unordered_set<int>>()},
+        dead_terms {owned_dead_terms} {};
 
     Level2CenterIndex(int r, int v, double d_rv) :
-        tree {r, v, d_rv} {};
+        tree {r, v, d_rv},
+        owned_dead_terms {std::make_shared<std::unordered_set<int>>()},
+        dead_terms {owned_dead_terms} {};
+
+    Level2CenterIndex(
+        int r,
+        int v,
+        double d_rv,
+        std::shared_ptr<const std::unordered_set<int>> shared_dead_terms
+    ) :
+        tree {r, v, d_rv},
+        dead_terms {shared_dead_terms} {};
 
     void add_term(int t, double d_vt) {
-      if (has_key(dead_terms, t))
+      if (dead_terms != nullptr and has_key(*dead_terms, t))
         return;
       tree.add_term(t, d_vt);
     }
 
     void erase_and_reset(const std::unordered_set<int> &terms_del) {
-      for (auto t : terms_del)
-        dead_terms.insert(t);
-      tree.erase_and_reset(dead_terms);
+      if (owned_dead_terms != nullptr) {
+        for (auto t : terms_del)
+          owned_dead_terms->insert(t);
+      }
+      if (dead_terms != nullptr)
+        tree.erase_and_reset(terms_del, dead_terms.get());
+      else
+        tree.erase_and_reset(terms_del);
     }
 
     void zero_drv() {

@@ -169,11 +169,12 @@ namespace dst {
       // init a Level2CenterIndex for each v
       std::unordered_map<int, Level2CenterIndex> center_idxs;
       std::list<int> LBs;
+      auto covered_terms = std::make_shared<std::unordered_set<int>>();
       for (auto v: V) {
         center_idxs.emplace(
           std::piecewise_construct,
           std::forward_as_tuple(v),
-          std::forward_as_tuple(root, v, dists_r->at(v))
+          std::forward_as_tuple(root, v, dists_r->at(v), covered_terms)
         );
         LBs.push_back(v);
       }
@@ -194,6 +195,7 @@ namespace dst {
         if (DEBUG) fmt::println("level2 greedy through {}, d_rv={}, cov={}, density={}", best->v, best->d_rv, best->terms, best->density());
         for (auto t: best->terms) {
           cosssp.delete_source(t);
+          covered_terms->insert(t);
         }
         auto covered_by_best = par->append(best, true);
 
