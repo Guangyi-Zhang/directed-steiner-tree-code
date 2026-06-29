@@ -570,27 +570,22 @@ namespace dst {
         update_best(v);
         auto &idx_best = center_idxs.at(v_best);
 
-        // prune LBs that cannot beat the current UB
+        // Prune from the queue front only. Later centers do not need to be
+        // inspected until every earlier LB has been certified/pruned.
         int k = terms_left.size();
-        for (auto it = LBs.begin(); it != LBs.end(); ) {
-          auto &idx_lb = center_idxs.at(*it);
+        while (not LBs.empty()) {
+          auto &idx_lb = center_idxs.at(LBs.front());
           auto lb = idx_lb.optimistic_bound(idx_lb.tree.d_rv, k, d_vt, false);
           if (idx_lb.tree.ready or leq(idx_best.density(), lb.density)) {
-            it = LBs.erase(it); // safe only for list
+            LBs.pop_front();
           } else {
-            ++it;
+            break;
           }
         }
 
         // wait until only v_best remains among surviving LBs
-        bool has_other_lb = false;
-        for (auto v_lb: LBs) {
-          if (v_lb != v_best) {
-            has_other_lb = true;
-            break;
-          }
-        }
-        if (has_other_lb)
+        if (LBs.size() >= 2 or
+            (LBs.size() == 1 and LBs.front() != v_best))
           continue;
 
         // early stop once the best tree is fully determined
