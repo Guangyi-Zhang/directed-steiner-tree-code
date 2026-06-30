@@ -246,6 +246,8 @@ auto main(int argc, char** argv) -> int {
 
   // one extra run of dijkstra in constructor to remove unreachable vertices
   DST dt = DST(edges, weights, root, terms);
+  edges.clear(); edges.shrink_to_fit();
+  weights.clear(); weights.shrink_to_fit();
   spdlog::info("reachable terms= {}", dt.terms);
 
   std::clock_t c_start = std::clock();
@@ -326,7 +328,7 @@ auto main(int argc, char** argv) -> int {
   d.AddMember("n", rapidjson::Value(n), a); 
   d.AddMember("m", rapidjson::Value(m), a); 
   d.AddMember("k_", rapidjson::Value(dt.terms.size()), a); 
-  d.AddMember("n_", rapidjson::Value(dt.V.size()), a); 
+  d.AddMember("n_", rapidjson::Value(dt.n_original), a); 
   d.AddMember("m_", rapidjson::Value(dt.narcs), a); 
   d.AddMember("seed", rapidjson::Value(seed), a); 
   d.AddMember("root", rapidjson::Value(root), a); 

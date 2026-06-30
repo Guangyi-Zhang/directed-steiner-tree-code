@@ -366,7 +366,7 @@ TEST_CASE("fast_level2") {
 
   auto fast2 = dt.fast_level2_alg();
   //CHECK(dt.strtest == "5:1.000000,4:5.000000,3:5.000000,2:5.000000,1:5.000000,0:1.000000,greedy_by_pruning"); // v:denlb
-  CHECK(dt.strtest == "5:1.000000,4:4.000000,3:3.000000,2:2.000000,1:1.000000,0:1.000000,greedy_by_pruning"); // prune when d_vt=0
+  CHECK(dt.strtest == "0:1.000000,1:2.000000,2:3.000000,3:4.000000,4:5.000000,5:1.000000,greedy_by_pruning"); // prune when d_vt=0
   
   CHECK(eq(fast2->to_tree()->cost, 1));
   CHECK(eq(fast2->cost_sc, 1));

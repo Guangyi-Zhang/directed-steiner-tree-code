@@ -7,6 +7,7 @@
 #include <cassert>
 #include <algorithm>
 #include <iterator> // std::advance
+#include <numeric>  // std::partial_sum
 #include <string>
 #include <vector>
 #include <queue>
@@ -25,6 +26,7 @@
 #include "dst/tree.hpp"
 #include "dst/partree.hpp"
 #include "dst/dijkstra.hpp"
+#include "dst/csrgraph.hpp"
 
 
 namespace dst {
@@ -37,85 +39,144 @@ namespace dst {
     std::vector<int> terms;
     std::unordered_set<int> terms_dm;// dummy
     std::unordered_map<int, int> terms_map;
-    std::unordered_map<std::pair<int,int>, double, boost::hash<std::pair<int,int>>> w;
-    std::unordered_map<int, std::vector<int>> adj;
-    std::unordered_map<int, std::vector<int>> adj_r; // reverse adj
-    std::unordered_set<int> V; // excluding dummy terminals
+    CSRGraph graph;
+    int n_original = 0;
 
     // for testing
-    int narcs; 
+    int narcs;
     std::string strtest = "";
 
-    DST(  const std::vector<std::pair<int,int>> &edges, 
-          const std::vector<double> &edgeweights, 
-          const int root, 
+    DST(  const std::vector<std::pair<int,int>> &edges,
+          const std::vector<double> &edgeweights,
+          const int root,
           const std::vector<int> &terminals) :
         root {root}
     {
-      int v_max = init_graph(edges, edgeweights);
+      // First pass: build temporary CSR to find unreachable vertices
+      int v_max = build_csr(graph, edges, edgeweights, nullptr, {});
 
-      // collect unreachble vertices
-      auto [dists_r, trace_r] = dijkstra(adj, w, root);
+      // Dijkstra from root on the temporary graph
+      auto [dists_r, trace_r] = dijkstra(graph.fwd_offset, graph.fwd_target,
+                                          graph.fwd_weight, graph.n, root);
 
       std::unordered_set<int> unreachables;
-      for (auto u: V) {
+      for (int u = 0; u <= v_max; u++) {
         if (not has_key(*dists_r, u))
           unreachables.insert(u);
       }
 
-      // re-initialize after proprecessing
-      v_max = init_graph(edges, edgeweights, &unreachables);
-
+      // Filter terminals
       for (auto t: terminals) {
-        if (has_key(unreachables, t) or not has_key(V, t))
+        if (has_key(unreachables, t))
+          continue;
+        if (t < 0 or t > v_max)
           continue;
         terms.push_back(t);
       }
 
-      // create dummy terminals
-      int i {1};
+      // Build dummy terminal edges
+      std::vector<std::pair<std::pair<int,int>, float>> dummy_edges;
+      int i = 1;
       for (auto t: terms) {
         int t_dm = v_max + i++;
         terms_dm.insert(t_dm);
         terms_map[t] = t_dm;
         terms_map[t_dm] = t;
-
-        adj[t].push_back(t_dm);
-        adj_r[t_dm].push_back(t);
-        w[{t, t_dm}] = 0;
+        dummy_edges.push_back({{t, t_dm}, 0.0f});
       }
 
-      Tree::w = &w;
+      // Second pass: build final CSR with filtered edges + dummy terminals
+      v_max = build_csr(graph, edges, edgeweights, &unreachables, dummy_edges);
+      n_original = v_max + 1 - static_cast<int>(terms.size());
+      narcs = graph.m - static_cast<int>(dummy_edges.size());
+
+      Tree::csr_graph = &graph;
     }
 
 
-    int init_graph(const std::vector<std::pair<int,int>> &edges, 
-                   const std::vector<double> &edgeweights,
-                   const std::unordered_set<int> *unreachables=nullptr) 
+    static int build_csr(
+        CSRGraph &g,
+        const std::vector<std::pair<int,int>> &edges,
+        const std::vector<double> &edgeweights,
+        const std::unordered_set<int> *unreachables,
+        const std::vector<std::pair<std::pair<int,int>, float>> &extra_edges)
     {
-      V.clear();
-      adj.clear();
-      adj_r.clear();
-      w.clear();
-      narcs = 0;
-
+      // Pass 1: determine n and count degrees
       int v_max = 0;
+      int edge_count = 0;
       for (size_t i = 0; i < edges.size(); i++) {
-          auto p = edges[i];
+        auto &p = edges[i];
+        if (unreachables != nullptr) {
+          if (has_key(*unreachables, p.first) or has_key(*unreachables, p.second))
+            continue;
+        }
+        v_max = std::max({p.first, p.second, v_max});
+        edge_count++;
+      }
+      for (auto &[ep, ew] : extra_edges) {
+        v_max = std::max({ep.first, ep.second, v_max});
+        edge_count++;
+      }
 
-          // drop unreachable arcs
-          if (unreachables != nullptr) {
-            if (has_key(*unreachables, p.first) or has_key(*unreachables, p.second))
-              continue;
-          }
+      int n = v_max + 1;
+      int m = edge_count;
+      g.n = n;
+      g.m = m;
 
-          narcs++;
-          adj[p.first].push_back(p.second);
-          adj_r[p.second].push_back(p.first);
-          w[{p.first, p.second}] = edgeweights[i];
-          V.insert(p.first);
-          V.insert(p.second);
-          v_max = std::max({p.first, p.second, v_max});
+      // Allocate
+      g.fwd_offset.assign(n + 1, 0);
+      g.rev_offset.assign(n + 1, 0);
+      g.fwd_target.resize(m);
+      g.fwd_weight.resize(m);
+      g.rev_target.resize(m);
+      g.rev_weight.resize(m);
+
+      // Count out-degree (fwd) and in-degree (rev)
+      for (size_t i = 0; i < edges.size(); i++) {
+        auto &p = edges[i];
+        if (unreachables != nullptr) {
+          if (has_key(*unreachables, p.first) or has_key(*unreachables, p.second))
+            continue;
+        }
+        g.fwd_offset[p.first + 1]++;
+        g.rev_offset[p.second + 1]++;
+      }
+      for (auto &[ep, ew] : extra_edges) {
+        g.fwd_offset[ep.first + 1]++;
+        g.rev_offset[ep.second + 1]++;
+      }
+
+      // Prefix sum
+      for (int i = 1; i <= n; i++) {
+        g.fwd_offset[i] += g.fwd_offset[i-1];
+        g.rev_offset[i] += g.rev_offset[i-1];
+      }
+
+      // Fill using temporary position counters
+      std::vector<int> fwd_pos(g.fwd_offset.begin(), g.fwd_offset.end() - 1);
+      std::vector<int> rev_pos(g.rev_offset.begin(), g.rev_offset.end() - 1);
+
+      for (size_t i = 0; i < edges.size(); i++) {
+        auto &p = edges[i];
+        if (unreachables != nullptr) {
+          if (has_key(*unreachables, p.first) or has_key(*unreachables, p.second))
+            continue;
+        }
+        float w = static_cast<float>(edgeweights[i]);
+        int fi = fwd_pos[p.first]++;
+        g.fwd_target[fi] = p.second;
+        g.fwd_weight[fi] = w;
+        int ri = rev_pos[p.second]++;
+        g.rev_target[ri] = p.first;
+        g.rev_weight[ri] = w;
+      }
+      for (auto &[ep, ew] : extra_edges) {
+        int fi = fwd_pos[ep.first]++;
+        g.fwd_target[fi] = ep.second;
+        g.fwd_weight[fi] = ew;
+        int ri = rev_pos[ep.second]++;
+        g.rev_target[ri] = ep.first;
+        g.rev_weight[ri] = ew;
       }
 
       return v_max;
@@ -128,8 +189,8 @@ namespace dst {
      */
     auto level2_through_v(
         int r,
-        int v, 
-        double d_rv, 
+        int v,
+        double d_rv,
         const std::shared_ptr<std::unordered_map<int, std::shared_ptr<std::unordered_map<int,double>>>> dists_t,
         const std::unordered_set<int> &terms_left
     ){
@@ -137,9 +198,9 @@ namespace dst {
       std::vector<int> terms_left_v;
       std::vector<double> ds_vt;
       for (auto t: terms_left) {
-        if (not has_key(*(dists_t->at(t)), v)) 
+        if (not has_key(*(dists_t->at(t)), v))
           continue; // t is not reachable from v
-        
+
         terms_left_v.push_back(t);
         ds_vt.push_back(dists_t->at(t)->at(v));
       }
@@ -154,7 +215,7 @@ namespace dst {
         if (i == 0 or leq(den_i, tree->density())) {
           tree->add_term(t, ds_vt[idx]);
         }
-        else 
+        else
           break; // stop once adding a t increases den_v
       }
 
@@ -164,13 +225,16 @@ namespace dst {
 
     auto fast_level2_alg() {
       // dijktra from the root
-      auto [dists_r, trace_r] = dijkstra(adj, w, root);
+      auto [dists_r, trace_r] = dijkstra(graph.fwd_offset, graph.fwd_target,
+                                          graph.fwd_weight, graph.n, root);
 
       // init a Level2CenterIndex for each v
       std::unordered_map<int, Level2CenterIndex> center_idxs;
       std::list<int> LBs;
       auto covered_terms = std::make_shared<std::unordered_set<int>>();
-      for (auto v: V) {
+      for (int v = 0; v < n_original; v++) {
+        if (not has_key(*dists_r, v))
+          continue;
         center_idxs.emplace(
           std::piecewise_construct,
           std::forward_as_tuple(v),
@@ -179,7 +243,8 @@ namespace dst {
         LBs.push_back(v);
       }
 
-      CoordinatedDijkstra cosssp {adj_r, w, terms_dm, true}; // dijktra from each terminal
+      CoordinatedDijkstra cosssp {graph.rev_offset, graph.rev_target,
+                                   graph.rev_weight, terms_dm};
       auto par = std::make_shared<PartialTreeManager> (root);
       par->trace_r = trace_r;
       par->trace_t = cosssp.trace_t;
@@ -299,7 +364,7 @@ namespace dst {
 
     auto level2_rooted_at_r(
         int r,
-        const std::unordered_set<int> &V_cand, 
+        int n_cand,
         const std::unordered_set<int> &terms_cand,
         std::shared_ptr<std::unordered_map<int,double>> dists_r=nullptr,
         std::shared_ptr<std::unordered_map<int,int>> trace_r=nullptr,
@@ -308,15 +373,17 @@ namespace dst {
     ) {
       // dijktra from the root
       if (dists_r == nullptr)
-        std::tie(dists_r, trace_r) = dijkstra(adj, w, r);
+        std::tie(dists_r, trace_r) = dijkstra(graph.fwd_offset, graph.fwd_target,
+                                               graph.fwd_weight, graph.n, r);
 
       // dijktra from each terminal
       if (dists_t == nullptr) {
         trace_t = std::make_shared<std::unordered_map<int, std::shared_ptr<std::unordered_map<int,int>>>>();
         dists_t = std::make_shared<std::unordered_map<int, std::shared_ptr<std::unordered_map<int,double>>>>();
         for (auto t: terms_cand) {
-          auto [dists_, trace_] = dijkstra(adj_r, w, t, true);
-          (*dists_t)[t] = dists_; 
+          auto [dists_, trace_] = dijkstra(graph.rev_offset, graph.rev_target,
+                                            graph.rev_weight, graph.n, t);
+          (*dists_t)[t] = dists_;
           (*trace_t)[t] = trace_;
         }
       }
@@ -330,7 +397,9 @@ namespace dst {
       while (terms_left.size() > 0) {
         // enum all v as the middle vertex in a 2-level tree
         std::shared_ptr<PartialTree> best = nullptr;
-        for (auto v: V_cand) {
+        for (int v = 0; v < n_cand; v++) {
+          if (not has_key(*dists_r, v))
+            continue;
           double d_rv = has_key(*covered, v)? 0 : dists_r->at(v);
           auto tree_v = level2_through_v(r, v, d_rv, dists_t, terms_left);
 
@@ -338,7 +407,7 @@ namespace dst {
           if (DEBUG) fmt::println("level2_rooted_at_{}: #terms_left={}, trying v={} and density={} and cov={}", r, terms_left.size(), v, tree_v->density(), tree_v->terms);
           if (best == nullptr or
               tree_v->density() < best->density() or // breaking tie
-              (std::abs(tree_v->density() - best->density()) < EPSILON and 
+              (std::abs(tree_v->density() - best->density()) < EPSILON and
                tree_v->terms.size() > best->terms.size())) {
             best = tree_v;
           }
@@ -367,7 +436,7 @@ namespace dst {
 
 
     auto level2_alg() {
-      return level2_rooted_at_r(root, V, terms_dm);
+      return level2_rooted_at_r(root, n_original, terms_dm);
     }
 
 
@@ -383,18 +452,21 @@ namespace dst {
 
 
     auto residual_weights(const std::shared_ptr<Tree> tree) const {
-      // Set all tree edges to cost 0
-      auto w_res = w;
+      auto fwd_res = graph.fwd_weight;
+      auto rev_res = graph.rev_weight;
       for (auto &p: tree->trace) {
         int v = p.first;
         int u = p.second;
         if (u == NONVERTEX)
           continue;
-        auto e = std::make_pair(u, v);
-        if (has_key(w_res, e))
-          w_res[e] = 0;
+        for (int i = graph.fwd_offset[u]; i < graph.fwd_offset[u+1]; i++) {
+          if (graph.fwd_target[i] == v) { fwd_res[i] = 0.0f; break; }
+        }
+        for (int i = graph.rev_offset[v]; i < graph.rev_offset[v+1]; i++) {
+          if (graph.rev_target[i] == u) { rev_res[i] = 0.0f; break; }
+        }
       }
-      return w_res;
+      return std::make_pair(std::move(fwd_res), std::move(rev_res));
     }
 
 
@@ -403,7 +475,8 @@ namespace dst {
       auto trace_t = std::make_shared<std::unordered_map<int, std::shared_ptr<std::unordered_map<int,int>>>>();
       auto dists_t = std::make_shared<std::unordered_map<int, std::shared_ptr<std::unordered_map<int,double>>>>();
       for (auto t: terms_dm) {
-        auto [dists_, trace_] = dijkstra(adj_r, w, t, true);
+        auto [dists_, trace_] = dijkstra(graph.rev_offset, graph.rev_target,
+                                          graph.rev_weight, graph.n, t);
         (*dists_t)[t] = dists_;
         (*trace_t)[t] = trace_;
       }
@@ -418,12 +491,13 @@ namespace dst {
 
       while (terms_left.size() > 0) {
         auto sources = tree_vertices(par->totree);
-        auto [dists_r, trace_r] = dijkstra_multisource(adj, w, sources);
+        auto [dists_r, trace_r] = dijkstra_multisource(graph.fwd_offset, graph.fwd_target,
+                                                         graph.fwd_weight, graph.n, sources);
         sssp_nodes_visited += dists_r->size();
         par->trace_r = trace_r;
 
         std::shared_ptr<PartialTree> best = nullptr;
-        for (auto v: V) {
+        for (int v = 0; v < n_original; v++) {
           if (not has_key(*dists_r, v))
             continue;
           auto tree_v = level2_through_v(root, v, dists_r->at(v), dists_t, terms_left);
@@ -457,14 +531,16 @@ namespace dst {
       int sssp_nodes_visited = 0;
 
       while (terms_left.size() > 0) {
-        auto w_res = residual_weights(par->totree); // Paid tree edges cost 0
-        auto [dists_r, trace_r] = dijkstra(adj, w_res, root);
+        auto [fwd_res, rev_res] = residual_weights(par->totree);
+        auto [dists_r, trace_r] = dijkstra(graph.fwd_offset, graph.fwd_target,
+                                            fwd_res, graph.n, root);
 
-        // Backward Dijkstra from each remaining terminal on w_res.
+        // Backward Dijkstra from each remaining terminal on residual weights.
         auto trace_t = std::make_shared<std::unordered_map<int, std::shared_ptr<std::unordered_map<int,int>>>>();
         auto dists_t = std::make_shared<std::unordered_map<int, std::shared_ptr<std::unordered_map<int,double>>>>();
         for (auto t: terms_left) {
-          auto [dists_, trace_] = dijkstra(adj_r, w_res, t, true);
+          auto [dists_, trace_] = dijkstra(graph.rev_offset, graph.rev_target,
+                                            rev_res, graph.n, t);
           (*dists_t)[t] = dists_;
           (*trace_t)[t] = trace_;
         }
@@ -478,7 +554,7 @@ namespace dst {
 
         // Greedy 2-level bunch: pick v minimizing density among uncovered terms.
         std::shared_ptr<PartialTree> best = nullptr;
-        for (auto v: V) {
+        for (int v = 0; v < n_original; v++) {
           if (not has_key(*dists_r, v))
             continue;
           auto tree_v = level2_through_v(root, v, dists_r->at(v), dists_t, terms_left);
@@ -508,12 +584,12 @@ namespace dst {
     auto fast_level2_minden(
         std::shared_ptr<std::unordered_map<int,double>> dists_r,
         const std::unordered_set<int> &terms_left,
-        const std::unordered_map<std::pair<int,int>, double, boost::hash<std::pair<int,int>>> &edgeweight
+        const std::vector<float> &rev_weight_to_use
     ) {
       // init a Level2CenterIndex for each v reachable from root
       std::unordered_map<int, Level2CenterIndex> center_idxs;
       std::list<int> LBs;
-      for (auto v: V) {
+      for (int v = 0; v < n_original; v++) {
         if (not has_key(*dists_r, v))
           continue;
         center_idxs.emplace(
@@ -524,7 +600,8 @@ namespace dst {
         LBs.push_back(v);
       }
 
-      CoordinatedDijkstra cosssp {adj_r, edgeweight, terms_left, true}; // backward Dijkstra from each remaining terminal
+      CoordinatedDijkstra cosssp {graph.rev_offset, graph.rev_target,
+                                   rev_weight_to_use, terms_left};
       int v_best {NONVERTEX};
 
       // function: update the v_best with lowest density (UB) if tree_v has lower density
@@ -616,12 +693,13 @@ namespace dst {
       std::unordered_set<int> terms_left(terms_dm.begin(), terms_dm.end());
       // One index per center v: terminals inserted in nondecreasing d(v,t) order.
       std::unordered_map<int, AdaptiveLevel2CenterIndex> center_idxs;
-      for (auto v: V) {
+      for (int v = 0; v < n_original; v++) {
         center_idxs.emplace(v, AdaptiveLevel2CenterIndex(v, terms_dm.size()));
       }
 
       // Terminal-side search runs once for the whole algorithm run.
-      CoordinatedDijkstra cosssp {adj_r, w, terms_dm, true};
+      CoordinatedDijkstra cosssp {graph.rev_offset, graph.rev_target,
+                                   graph.rev_weight, terms_dm};
       par->trace_t = cosssp.trace_t;
       int root_sssp_nodes_visited = 0;
       double terminal_lb = 0; // frontier distance from cosssp; lower-bounds undiscovered d(v,t)
@@ -653,7 +731,8 @@ namespace dst {
       while (terms_left.size() > 0) {
         // Root-side residual distances from vertices already in the partial tree.
         auto sources = tree_vertices(par->totree);
-        auto [dists_r, trace_r] = dijkstra_multisource(adj, w, sources);
+        auto [dists_r, trace_r] = dijkstra_multisource(graph.fwd_offset, graph.fwd_target,
+                                                         graph.fwd_weight, graph.n, sources);
         root_sssp_nodes_visited += dists_r->size();
         par->trace_r = trace_r;
 
@@ -762,11 +841,12 @@ namespace dst {
       int sssp_nodes_visited = 0;
 
       while (terms_left.size() > 0) {
-        auto w_res = residual_weights(par->totree);
-        auto [dists_r, trace_r] = dijkstra(adj, w_res, root);
+        auto [fwd_res, rev_res] = residual_weights(par->totree);
+        auto [dists_r, trace_r] = dijkstra(graph.fwd_offset, graph.fwd_target,
+                                            fwd_res, graph.n, root);
         sssp_nodes_visited += dists_r->size();
 
-        auto [best, trace_t, sssp_t] = fast_level2_minden(dists_r, terms_left, w_res);
+        auto [best, trace_t, sssp_t] = fast_level2_minden(dists_r, terms_left, rev_res);
         sssp_nodes_visited += sssp_t;
         par->trace_r = trace_r;
         par->trace_t = trace_t;
@@ -790,36 +870,43 @@ namespace dst {
        --------------*/
       // pre-compute dijkstra
       // dijktra from the root
-      auto [dists_r, trace_r] = dijkstra(adj, w, root);
+      auto [dists_r, trace_r] = dijkstra(graph.fwd_offset, graph.fwd_target,
+                                          graph.fwd_weight, graph.n, root);
       // dijkstra from each u
       std::unordered_map<int, Dijkstra> sssp_u;
-      for (auto u: V) {
-        sssp_u[u] = std::move(Dijkstra(adj, w, u));
+      for (int u = 0; u < n_original; u++) {
+        if (not has_key(*dists_r, u))
+          continue;
+        sssp_u[u] = std::move(Dijkstra(graph.fwd_offset, graph.fwd_target,
+                                         graph.fwd_weight, u));
       }
       // backward dijktra from each terminal
       auto trace_t = std::make_shared<std::unordered_map<int, std::shared_ptr<std::unordered_map<int,int>>>>();
       auto dists_t = std::make_shared<std::unordered_map<int, std::shared_ptr<std::unordered_map<int,double>>>>();
       for (auto t: terms_dm) {
-        auto [dists_, trace_] = dijkstra(adj_r, w, t, true);
-        (*dists_t)[t] = dists_; 
+        auto [dists_, trace_] = dijkstra(graph.rev_offset, graph.rev_target,
+                                          graph.rev_weight, graph.n, t);
+        (*dists_t)[t] = dists_;
         (*trace_t)[t] = trace_;
       }
 
       // A pq for each u to rank 2-level partrees
-      std::unordered_map<int, 
-                         std::priority_queue<std::tuple<double,int,double,int,std::shared_ptr<PartialTree>>, 
-                                             std::vector<std::tuple<double,int,double,int,std::shared_ptr<PartialTree>>>, 
+      std::unordered_map<int,
+                         std::priority_queue<std::tuple<double,int,double,int,std::shared_ptr<PartialTree>>,
+                                             std::vector<std::tuple<double,int,double,int,std::shared_ptr<PartialTree>>>,
                                              std::greater<std::tuple<double,int,double,int,std::shared_ptr<PartialTree>>>>
                         > Q;
-      for(auto u: V) {
-        Q[u] = std::priority_queue<std::tuple<double,int,double,int,std::shared_ptr<PartialTree>>, 
-                                     std::vector<std::tuple<double,int,double,int,std::shared_ptr<PartialTree>>>, 
+      for (auto &p : sssp_u) {
+        Q[p.first] = std::priority_queue<std::tuple<double,int,double,int,std::shared_ptr<PartialTree>>,
+                                     std::vector<std::tuple<double,int,double,int,std::shared_ptr<PartialTree>>>,
                                      std::greater<std::tuple<double,int,double,int,std::shared_ptr<PartialTree>>>> ();
       }
 
       // pre-compute low-level look-up table, one for each v in r-u-v-{t}
       std::unordered_map<int, PartialTreeTable> tbls;
-      for (auto v: V) {
+      for (int v = 0; v < n_original; v++) {
+        if (not has_key(*dists_r, v))
+          continue;
         PartialTreeTable tbl (v);
         for (auto t: terms_dm) {
           auto dists = dists_t->at(t);
@@ -853,10 +940,12 @@ namespace dst {
       auto covered = std::make_shared<std::unordered_set<int>>();
       // ***** iterative add 3-level partial trees *****
       while (terms_left.size() > 0) {
-        // best 2-level partree as initial UB 
+        // best 2-level partree as initial UB
         auto best = std::make_shared<PartialTreeManager> (root);
         std::shared_ptr<PartialTree> best2 = nullptr;
-        for (auto v: V) {
+        for (int v = 0; v < n_original; v++) {
+          if (not has_key(*dists_r, v))
+            continue;
           double d_rv = has_key(*covered, v)? 0 : dists_r->at(v);
           auto tree2_rv = level2_through_v(root, v, d_rv, dists_t, terms_left);
           if (best2 == nullptr or lq(tree2_rv->density(), best2->density()))
@@ -868,12 +957,12 @@ namespace dst {
         best->append(best2);
 
         // ***** find the best 3-level partree *****
-        for (auto u: V) {
+        for (auto &[u, sssp_entry] : sssp_u) {
+          if (not has_key(*dists_r, u))
+            continue;
           double d_ru = has_key(*covered, u)? 0 : dists_r->at(u);
           #ifndef NO_FAST3_PRUNE_U
           if (leq(alpha * best->density(), best2->density() - d_ru)) {
-            // it is fine to skip root=u, same as best2
-            // also fine to skip u in covered with d_ru=0 
             continue;
           }
           #endif
@@ -896,9 +985,9 @@ namespace dst {
             std::shared_ptr<PartialTree> tree2_u = nullptr;
 
             // ***** process prior reached v's *****
-            if (not Q_u->empty() and tree2_u_old == nullptr) { // restore Q_u at the i-th visit to u 
-              auto Q_new = std::priority_queue<std::tuple<double,int,double,int,std::shared_ptr<PartialTree>>, 
-                                               std::vector<std::tuple<double,int,double,int,std::shared_ptr<PartialTree>>>, 
+            if (not Q_u->empty() and tree2_u_old == nullptr) { // restore Q_u at the i-th visit to u
+              auto Q_new = std::priority_queue<std::tuple<double,int,double,int,std::shared_ptr<PartialTree>>,
+                                               std::vector<std::tuple<double,int,double,int,std::shared_ptr<PartialTree>>>,
                                                std::greater<std::tuple<double,int,double,int,std::shared_ptr<PartialTree>>>> ();
 
               std::vector<std::tuple<double,int,double,int,std::shared_ptr<PartialTree>>> &wrap_Q_u = Container(*Q_u);
@@ -933,12 +1022,14 @@ namespace dst {
             }
 
             // ***** process new v's *****
-            while (true) { 
+            while (true) {
               // TODO: setup to_reach in sssp
               auto [v, d_uv] = sssp.next(); // even after reaching all v, most pq has huge amount left
               if (v == NONVERTEX)
                 break;
               if (u != root and v == root) // allow u == v
+                continue;
+              if (has_key(terms_dm, v))
                 continue;
 
               // try to early-terminate sssp
@@ -977,7 +1068,7 @@ namespace dst {
             // criterion for refusing new tree2_u
             if (is_u_pruned or tree2_u == nullptr or tree2_u->terms.size() == 0)
               break;
-            double den_new = (tree_u->cost_sc + tree2_u->cost_sc) / 
+            double den_new = (tree_u->cost_sc + tree2_u->cost_sc) /
               (tree_u->terms.size() + tree2_u->terms.size());
             if (not tree_u->terms.empty() and lq(tree_u->density(), den_new))
               break;
@@ -1028,21 +1119,26 @@ namespace dst {
     auto level3_alg() {
       // pre-compute dijkstra
       // dijktra from the root
-      auto [dists_r, trace_r] = dijkstra(adj, w, root);
+      auto [dists_r, trace_r] = dijkstra(graph.fwd_offset, graph.fwd_target,
+                                          graph.fwd_weight, graph.n, root);
       // dijkstra from each u
       auto trace_u = std::make_shared<std::unordered_map<int, std::shared_ptr<std::unordered_map<int,int>>>>();
       auto dists_u = std::make_shared<std::unordered_map<int, std::shared_ptr<std::unordered_map<int,double>>>>();
-      for (auto u: V) {
-        auto [dists_, trace_] = dijkstra(adj, w, u);
-        (*dists_u)[u] = dists_; 
+      for (int u = 0; u < n_original; u++) {
+        if (not has_key(*dists_r, u))
+          continue;
+        auto [dists_, trace_] = dijkstra(graph.fwd_offset, graph.fwd_target,
+                                          graph.fwd_weight, graph.n, u);
+        (*dists_u)[u] = dists_;
         (*trace_u)[u] = trace_;
       }
       // backward dijktra from each terminal
       auto trace_t = std::make_shared<std::unordered_map<int, std::shared_ptr<std::unordered_map<int,int>>>>();
       auto dists_t = std::make_shared<std::unordered_map<int, std::shared_ptr<std::unordered_map<int,double>>>>();
       for (auto t: terms_dm) {
-        auto [dists_, trace_] = dijkstra(adj_r, w, t, true);
-        (*dists_t)[t] = dists_; 
+        auto [dists_, trace_] = dijkstra(graph.rev_offset, graph.rev_target,
+                                          graph.rev_weight, graph.n, t);
+        (*dists_t)[t] = dists_;
         (*trace_t)[t] = trace_;
       }
 
@@ -1057,7 +1153,9 @@ namespace dst {
         std::shared_ptr<PartialTreeManager> best = nullptr;
 
         // loop each u
-        for (auto u: V) {
+        for (int u = 0; u < n_original; u++) {
+          if (not has_key(*dists_u, u))
+            continue;
           auto dists_uv = dists_u->at(u);
           double d_ru = has_key(*covered, u)? 0 : dists_r->at(u);
           auto tree_u = std::make_shared<PartialTreeManager> (root, u, d_ru);
@@ -1070,7 +1168,7 @@ namespace dst {
           // iterative add 2-level partial trees by looping each v
           while (terms_left_u.size() > 0) {
             std::shared_ptr<PartialTree> tree2_u = nullptr;
-            for (auto v: V) {
+            for (int v = 0; v < n_original; v++) {
               if ((u != root and v == root) or not has_key(*dists_uv, v)) // allow u == v
                 continue;
               auto tree2_uv = level2_through_v(u, v, dists_uv->at(v), dists_t, terms_left_u);
@@ -1081,7 +1179,7 @@ namespace dst {
               break;
 
             // try the best tree2_u
-            double den_new = (tree_u->cost_sc + tree2_u->cost_sc) / 
+            double den_new = (tree_u->cost_sc + tree2_u->cost_sc) /
               (tree_u->terms.size() + tree2_u->terms.size());
             if (not tree_u->terms.empty() and lq(tree_u->density(), den_new))
               break;
@@ -1128,7 +1226,8 @@ namespace dst {
 
       std::unordered_set<int> terms_left(terms_dm.begin(), terms_dm.end());
       while (not terms_left.empty()) {
-        auto [dists, trace] = dijkstra(adj, w, root, false, terms_left);
+        auto [dists, trace] = dijkstra(graph.fwd_offset, graph.fwd_target,
+                                        graph.fwd_weight, graph.n, root, terms_left);
         sssp_nodes_visited += dists->size();
 
         // find the best shortest path
@@ -1151,11 +1250,11 @@ namespace dst {
           // zero weight for covered arcs
           auto v = t_min;
           while (trace->at(v) != NONVERTEX) {
-            auto e = std::make_pair(trace->at(v), v);
-            w[e] = 0;
-            v = trace->at(v);
+            int u = trace->at(v);
+            graph.zero_edge(u, v);
+            v = u;
           }
-        } 
+        }
         else {
           break;
         }
@@ -1167,7 +1266,8 @@ namespace dst {
 
 
     auto level1_alg() {
-      auto [dists, trace] = dijkstra(adj, w, root, false, terms_dm);
+      auto [dists, trace] = dijkstra(graph.fwd_offset, graph.fwd_target,
+                                      graph.fwd_weight, graph.n, root, terms_dm);
 
       // take the union of all paths from root to t's
       auto tree = std::make_shared<Tree> (root);

@@ -12,9 +12,11 @@
 #include <boost/functional/hash.hpp>
 #include "dst/consts.hpp"
 #include "dst/utils.hpp"
+#include "dst/csrgraph.hpp"
 
 
 namespace dst {
+
 
 
   class TreeNode {
@@ -34,7 +36,7 @@ namespace dst {
 
   class Tree {
   public:
-    static const std::unordered_map<std::pair<int,int>, double, boost::hash<std::pair<int,int>>>* w; 
+    static const CSRGraph* csr_graph;
 
     int root;
     double cost {0}, cost_sc {0};
@@ -73,7 +75,7 @@ namespace dst {
                           std::make_pair(trace_arc->at(v), v);
         if(DEBUG) fmt::println("{}<-{}, {}", e.first, e.second, not has_key(trace, e.second));
         if (not has_key(trace, e.second)) {
-          cost += Tree::w->at(e);
+          cost += Tree::csr_graph->edge_weight(e.first, e.second);
           trace[e.second] = e.first;
         }
         else if (reverse) {
@@ -159,7 +161,7 @@ namespace dst {
       fmt::print(prefix);
       fmt::print(is_last_child ? "└──" : "├──");
       if (pa != NONVERTEX)
-        fmt::println("{} ({:05.1f})", v, Tree::w->at(std::make_pair(pa, v)));
+        fmt::println("{} ({:05.1f})", v, Tree::csr_graph->edge_weight(pa, v));
       else
         fmt::println("{}", v);
       size_t i = 0;
@@ -177,12 +179,12 @@ namespace dst {
       double sum {0};
       auto es = edges();
       for (const auto &e: *es) {
-        sum += Tree::w->at(e);
+        sum += Tree::csr_graph->edge_weight(e.first, e.second);
       }
       return sum;
     }
   };
 
-  const std::unordered_map<std::pair<int,int>, double, boost::hash<std::pair<int,int>>>* Tree::w = nullptr; 
+  const CSRGraph* Tree::csr_graph = nullptr;
 
 } // namespace dst

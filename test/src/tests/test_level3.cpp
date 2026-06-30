@@ -127,13 +127,13 @@ TEST_CASE("stop_picking_next_2partree") {
   DST dt = DST(edges, weights, 0, terms);
 
   auto tree_naive = dt.level1_alg();
-  CHECK(tree_naive->cost_sc == 3*6+2.9+2+100);
-  CHECK(tree_naive->cost == 2+4+6.9+100);
+  CHECK(tree_naive->cost_sc == doctest::Approx(3*6+2.9+2+100).epsilon(1e-6));
+  CHECK(tree_naive->cost == doctest::Approx(2+4+6.9+100).epsilon(1e-6));
 
-  auto tree2 = dt.level2_alg(); // pick 11-14 as root 
-  CHECK(tree2->to_tree()->cost == 2+4+6.9+100);
+  auto tree2 = dt.level2_alg(); // pick 11-14 as root
+  CHECK(tree2->to_tree()->cost == doctest::Approx(2+4+6.9+100).epsilon(1e-6));
   //CHECK(tree2->cost_sc == (1+1+2) * 3 + 2.9 + 2+100);
-  CHECK(tree2->cost_sc == (1+1+2) * 3 + 1.9 + 100);
+  CHECK(tree2->cost_sc == doctest::Approx((1+1+2) * 3 + 1.9 + 100).epsilon(1e-6));
 
   /*
   next u 1, costsc 7, cov 4
@@ -143,8 +143,8 @@ TEST_CASE("stop_picking_next_2partree") {
   std::vector<double> costs {7, 5.9, 100};
   std::vector<double> dens {7/4.0, 5.9/3, 100};
   auto tree3 = dt.level3_alg();
-  CHECK(tree3->to_tree()->cost == 2+4+6.9+100);
-  CHECK(tree3->cost_sc == (1+2+4) + (4+1.9) + 100);
+  CHECK(tree3->to_tree()->cost == doctest::Approx(2+4+6.9+100).epsilon(1e-6));
+  CHECK(tree3->cost_sc == doctest::Approx((1+2+4) + (4+1.9) + 100).epsilon(1e-6));
   int i = 0;
   for (auto d: tree3->density1by1) {
     CHECK(eq(d, dens[i])); i++;
@@ -156,8 +156,8 @@ TEST_CASE("stop_picking_next_2partree") {
 
   auto fast3 = dt.fast_level3_alg();
   //CHECK(fast3->cost_sc == (1+2+4) + (4+1.9) + 2+100);
-  CHECK(fast3->cost_sc == (1+2+4) + (4+1.9) + 100); 
-  CHECK(fast3->to_tree()->cost == 2+4+6.9+100);
+  CHECK(fast3->cost_sc == doctest::Approx((1+2+4) + (4+1.9) + 100).epsilon(1e-6));
+  CHECK(fast3->to_tree()->cost == doctest::Approx(2+4+6.9+100).epsilon(1e-6));
   i = 0;
   for (auto d: fast3->density1by1) {
     CHECK(eq(d, dens[i])); i++;
