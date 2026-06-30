@@ -24,7 +24,7 @@ int main(int argc, char** argv) {
                                          std::make_pair(4,11), 
                                          std::make_pair(4,12), 
                                          std::make_pair(4,13)};
-  std::vector<double> weights {1,1,1,2.5, 2,2,2, 1,1,1};
+  std::vector<float> weights {1,1,1,2.5, 2,2,2, 1,1,1};
   std::vector<int> terms {11,12,13};
   int root = 0;
 

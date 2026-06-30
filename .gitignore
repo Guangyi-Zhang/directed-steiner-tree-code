@@ -10,3 +10,8 @@ logs/
 paper/
 playground/
 notebooks/
+
+.agents/
+.codex/
+.claude/
+.cache/

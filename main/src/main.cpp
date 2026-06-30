@@ -67,7 +67,7 @@ auto main(int argc, char** argv) -> int {
 
   // load data
   std::vector<std::pair<int,int>> edges;
-  std::vector<double> weights;
+  std::vector<float> weights;
 
   std::ifstream file("datasets/" + dataset);
   

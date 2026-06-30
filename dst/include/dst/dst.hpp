@@ -47,7 +47,7 @@ namespace dst {
     std::string strtest = "";
 
     DST(  const std::vector<std::pair<int,int>> &edges,
-          const std::vector<double> &edgeweights,
+          const std::vector<float> &edgeweights,
           const int root,
           const std::vector<int> &terminals) :
         root {root}
@@ -57,7 +57,7 @@ namespace dst {
 
       // Dijkstra from root on the temporary graph
       auto [dists_r, trace_r] = dijkstra(graph.fwd_offset, graph.fwd_target,
-                                          graph.fwd_weight, graph.n, root);
+                                          graph.fwd_weight, root);
 
       std::unordered_set<int> unreachables;
       for (int u = 0; u <= v_max; u++) {
@@ -97,7 +97,7 @@ namespace dst {
     static int build_csr(
         CSRGraph &g,
         const std::vector<std::pair<int,int>> &edges,
-        const std::vector<double> &edgeweights,
+        const std::vector<float> &edgeweights,
         const std::unordered_set<int> *unreachables,
         const std::vector<std::pair<std::pair<int,int>, float>> &extra_edges)
     {
@@ -152,7 +152,7 @@ namespace dst {
         g.rev_offset[i] += g.rev_offset[i-1];
       }
 
-      // Fill using temporary position counters
+      // Fill using temporary position counters, just a copy of fwd_offset
       std::vector<int> fwd_pos(g.fwd_offset.begin(), g.fwd_offset.end() - 1);
       std::vector<int> rev_pos(g.rev_offset.begin(), g.rev_offset.end() - 1);
 
@@ -162,7 +162,7 @@ namespace dst {
           if (has_key(*unreachables, p.first) or has_key(*unreachables, p.second))
             continue;
         }
-        float w = static_cast<float>(edgeweights[i]);
+        float w = edgeweights[i];
         int fi = fwd_pos[p.first]++;
         g.fwd_target[fi] = p.second;
         g.fwd_weight[fi] = w;
@@ -191,7 +191,7 @@ namespace dst {
         int r,
         int v,
         double d_rv,
-        const std::shared_ptr<std::unordered_map<int, std::shared_ptr<std::unordered_map<int,double>>>> dists_t,
+        const std::shared_ptr<std::unordered_map<int, std::shared_ptr<std::unordered_map<int,float>>>> dists_t,
         const std::unordered_set<int> &terms_left
     ){
       // collect all t's for the current v
@@ -226,7 +226,7 @@ namespace dst {
     auto fast_level2_alg() {
       // dijktra from the root
       auto [dists_r, trace_r] = dijkstra(graph.fwd_offset, graph.fwd_target,
-                                          graph.fwd_weight, graph.n, root);
+                                          graph.fwd_weight, root);
 
       // init a Level2CenterIndex for each v
       std::unordered_map<int, Level2CenterIndex> center_idxs;
@@ -364,25 +364,25 @@ namespace dst {
 
     auto level2_rooted_at_r(
         int r,
-        int n_cand,
+        int n_V,
         const std::unordered_set<int> &terms_cand,
-        std::shared_ptr<std::unordered_map<int,double>> dists_r=nullptr,
+        std::shared_ptr<std::unordered_map<int,float>> dists_r=nullptr,
         std::shared_ptr<std::unordered_map<int,int>> trace_r=nullptr,
-        std::shared_ptr<std::unordered_map<int, std::shared_ptr<std::unordered_map<int,double>>>> dists_t=nullptr,
+        std::shared_ptr<std::unordered_map<int, std::shared_ptr<std::unordered_map<int,float>>>> dists_t=nullptr,
         std::shared_ptr<std::unordered_map<int, std::shared_ptr<std::unordered_map<int,int>>>> trace_t=nullptr
     ) {
       // dijktra from the root
       if (dists_r == nullptr)
         std::tie(dists_r, trace_r) = dijkstra(graph.fwd_offset, graph.fwd_target,
-                                               graph.fwd_weight, graph.n, r);
+                                               graph.fwd_weight, r);
 
       // dijktra from each terminal
       if (dists_t == nullptr) {
         trace_t = std::make_shared<std::unordered_map<int, std::shared_ptr<std::unordered_map<int,int>>>>();
-        dists_t = std::make_shared<std::unordered_map<int, std::shared_ptr<std::unordered_map<int,double>>>>();
+        dists_t = std::make_shared<std::unordered_map<int, std::shared_ptr<std::unordered_map<int,float>>>>();
         for (auto t: terms_cand) {
           auto [dists_, trace_] = dijkstra(graph.rev_offset, graph.rev_target,
-                                            graph.rev_weight, graph.n, t);
+                                            graph.rev_weight, t);
           (*dists_t)[t] = dists_;
           (*trace_t)[t] = trace_;
         }
@@ -397,7 +397,7 @@ namespace dst {
       while (terms_left.size() > 0) {
         // enum all v as the middle vertex in a 2-level tree
         std::shared_ptr<PartialTree> best = nullptr;
-        for (int v = 0; v < n_cand; v++) {
+        for (int v = 0; v < n_V; v++) {
           if (not has_key(*dists_r, v))
             continue;
           double d_rv = has_key(*covered, v)? 0 : dists_r->at(v);
@@ -452,6 +452,7 @@ namespace dst {
 
 
     auto residual_weights(const std::shared_ptr<Tree> tree) const {
+      // Set all tree edges to cost 0
       auto fwd_res = graph.fwd_weight;
       auto rev_res = graph.rev_weight;
       for (auto &p: tree->trace) {
@@ -473,15 +474,15 @@ namespace dst {
     auto adaptive_level2_alg() {
       // Terminal-side distances are fixed in the root-adaptive variant.
       auto trace_t = std::make_shared<std::unordered_map<int, std::shared_ptr<std::unordered_map<int,int>>>>();
-      auto dists_t = std::make_shared<std::unordered_map<int, std::shared_ptr<std::unordered_map<int,double>>>>();
+      auto dists_t = std::make_shared<std::unordered_map<int, std::shared_ptr<std::unordered_map<int,float>>>>();
       for (auto t: terms_dm) {
         auto [dists_, trace_] = dijkstra(graph.rev_offset, graph.rev_target,
-                                          graph.rev_weight, graph.n, t);
-        (*dists_t)[t] = dists_;
-        (*trace_t)[t] = trace_;
-      }
+                                            graph.rev_weight, t);
+          (*dists_t)[t] = dists_;
+          (*trace_t)[t] = trace_;
+        }
 
-      auto par = std::make_shared<PartialTreeManager> (root);
+        auto par = std::make_shared<PartialTreeManager> (root);
       par->trace_t = trace_t;
       std::unordered_set<int> terms_left(terms_dm.begin(), terms_dm.end());
       int sssp_nodes_visited = 0;
@@ -492,7 +493,7 @@ namespace dst {
       while (terms_left.size() > 0) {
         auto sources = tree_vertices(par->totree);
         auto [dists_r, trace_r] = dijkstra_multisource(graph.fwd_offset, graph.fwd_target,
-                                                         graph.fwd_weight, graph.n, sources);
+                                                         graph.fwd_weight, sources);
         sssp_nodes_visited += dists_r->size();
         par->trace_r = trace_r;
 
@@ -531,16 +532,16 @@ namespace dst {
       int sssp_nodes_visited = 0;
 
       while (terms_left.size() > 0) {
-        auto [fwd_res, rev_res] = residual_weights(par->totree);
+        auto [fwd_res, rev_res] = residual_weights(par->totree); // Paid tree edges cost 0
         auto [dists_r, trace_r] = dijkstra(graph.fwd_offset, graph.fwd_target,
-                                            fwd_res, graph.n, root);
+                                          fwd_res, root);
 
         // Backward Dijkstra from each remaining terminal on residual weights.
         auto trace_t = std::make_shared<std::unordered_map<int, std::shared_ptr<std::unordered_map<int,int>>>>();
-        auto dists_t = std::make_shared<std::unordered_map<int, std::shared_ptr<std::unordered_map<int,double>>>>();
+        auto dists_t = std::make_shared<std::unordered_map<int, std::shared_ptr<std::unordered_map<int,float>>>>();
         for (auto t: terms_left) {
           auto [dists_, trace_] = dijkstra(graph.rev_offset, graph.rev_target,
-                                            rev_res, graph.n, t);
+                                            rev_res, t);
           (*dists_t)[t] = dists_;
           (*trace_t)[t] = trace_;
         }
@@ -582,7 +583,7 @@ namespace dst {
 
     // One greedy step: pick a 2-level bunch (root->v->terminals) minimizing density.
     auto fast_level2_minden(
-        std::shared_ptr<std::unordered_map<int,double>> dists_r,
+        std::shared_ptr<std::unordered_map<int,float>> dists_r,
         const std::unordered_set<int> &terms_left,
         const std::vector<float> &rev_weight_to_use
     ) {
@@ -732,7 +733,7 @@ namespace dst {
         // Root-side residual distances from vertices already in the partial tree.
         auto sources = tree_vertices(par->totree);
         auto [dists_r, trace_r] = dijkstra_multisource(graph.fwd_offset, graph.fwd_target,
-                                                         graph.fwd_weight, graph.n, sources);
+                                                         graph.fwd_weight, sources);
         root_sssp_nodes_visited += dists_r->size();
         par->trace_r = trace_r;
 
@@ -843,7 +844,7 @@ namespace dst {
       while (terms_left.size() > 0) {
         auto [fwd_res, rev_res] = residual_weights(par->totree);
         auto [dists_r, trace_r] = dijkstra(graph.fwd_offset, graph.fwd_target,
-                                            fwd_res, graph.n, root);
+                                            fwd_res, root);
         sssp_nodes_visited += dists_r->size();
 
         auto [best, trace_t, sssp_t] = fast_level2_minden(dists_r, terms_left, rev_res);
@@ -871,7 +872,7 @@ namespace dst {
       // pre-compute dijkstra
       // dijktra from the root
       auto [dists_r, trace_r] = dijkstra(graph.fwd_offset, graph.fwd_target,
-                                          graph.fwd_weight, graph.n, root);
+                                          graph.fwd_weight, root);
       // dijkstra from each u
       std::unordered_map<int, Dijkstra> sssp_u;
       for (int u = 0; u < n_original; u++) {
@@ -882,10 +883,10 @@ namespace dst {
       }
       // backward dijktra from each terminal
       auto trace_t = std::make_shared<std::unordered_map<int, std::shared_ptr<std::unordered_map<int,int>>>>();
-      auto dists_t = std::make_shared<std::unordered_map<int, std::shared_ptr<std::unordered_map<int,double>>>>();
+      auto dists_t = std::make_shared<std::unordered_map<int, std::shared_ptr<std::unordered_map<int,float>>>>();
       for (auto t: terms_dm) {
         auto [dists_, trace_] = dijkstra(graph.rev_offset, graph.rev_target,
-                                          graph.rev_weight, graph.n, t);
+                                          graph.rev_weight, t);
         (*dists_t)[t] = dists_;
         (*trace_t)[t] = trace_;
       }
@@ -919,7 +920,7 @@ namespace dst {
       }
 
       // pre-compute min-den among 2-level partrees for each d_uv threshold
-      double dist_max = 0; // dist_max may not >= max_{u,v} d_uv
+      float dist_max = 0; // dist_max may not >= max_{u,v} d_uv
       for (auto &p: *dists_r) {
         dist_max = std::max(dist_max, p.second);
       }
@@ -1120,24 +1121,24 @@ namespace dst {
       // pre-compute dijkstra
       // dijktra from the root
       auto [dists_r, trace_r] = dijkstra(graph.fwd_offset, graph.fwd_target,
-                                          graph.fwd_weight, graph.n, root);
+                                          graph.fwd_weight, root);
       // dijkstra from each u
       auto trace_u = std::make_shared<std::unordered_map<int, std::shared_ptr<std::unordered_map<int,int>>>>();
-      auto dists_u = std::make_shared<std::unordered_map<int, std::shared_ptr<std::unordered_map<int,double>>>>();
+      auto dists_u = std::make_shared<std::unordered_map<int, std::shared_ptr<std::unordered_map<int,float>>>>();
       for (int u = 0; u < n_original; u++) {
         if (not has_key(*dists_r, u))
           continue;
         auto [dists_, trace_] = dijkstra(graph.fwd_offset, graph.fwd_target,
-                                          graph.fwd_weight, graph.n, u);
+                                          graph.fwd_weight, u);
         (*dists_u)[u] = dists_;
         (*trace_u)[u] = trace_;
       }
       // backward dijktra from each terminal
       auto trace_t = std::make_shared<std::unordered_map<int, std::shared_ptr<std::unordered_map<int,int>>>>();
-      auto dists_t = std::make_shared<std::unordered_map<int, std::shared_ptr<std::unordered_map<int,double>>>>();
+      auto dists_t = std::make_shared<std::unordered_map<int, std::shared_ptr<std::unordered_map<int,float>>>>();
       for (auto t: terms_dm) {
         auto [dists_, trace_] = dijkstra(graph.rev_offset, graph.rev_target,
-                                          graph.rev_weight, graph.n, t);
+                                          graph.rev_weight, t);
         (*dists_t)[t] = dists_;
         (*trace_t)[t] = trace_;
       }
@@ -1227,7 +1228,7 @@ namespace dst {
       std::unordered_set<int> terms_left(terms_dm.begin(), terms_dm.end());
       while (not terms_left.empty()) {
         auto [dists, trace] = dijkstra(graph.fwd_offset, graph.fwd_target,
-                                        graph.fwd_weight, graph.n, root, terms_left);
+                                        graph.fwd_weight, root, terms_left);
         sssp_nodes_visited += dists->size();
 
         // find the best shortest path
@@ -1266,19 +1267,19 @@ namespace dst {
 
 
     auto level1_alg() {
-      auto [dists, trace] = dijkstra(graph.fwd_offset, graph.fwd_target,
-                                      graph.fwd_weight, graph.n, root, terms_dm);
+      auto [dists_r, trace_r] = dijkstra(graph.fwd_offset, graph.fwd_target,
+                                          graph.fwd_weight, root, terms_dm);
 
       // take the union of all paths from root to t's
       auto tree = std::make_shared<Tree> (root);
       for (auto t: terms_dm) {
-        if (not has_key(*trace, t))
+        if (not has_key(*trace_r, t))
           continue; // disconnected graph
 
-        tree->add_arc(std::make_pair(root, t), (*dists)[t], trace, nullptr, false, true);
+        tree->add_arc(std::make_pair(root, t), (*dists_r)[t], trace_r, nullptr, false, true);
       }
 
-      tree->debuginfo["sssp_nodes_visited"] = std::to_string(dists->size());
+      tree->debuginfo["sssp_nodes_visited"] = std::to_string(dists_r->size());
       return tree;
     }
 

@@ -81,7 +81,7 @@ namespace dst {
     int v {NONVERTEX}; // the root has a single child
     double d_rv;
 
-    std::unordered_map<int, double> distances_t;
+    std::unordered_map<int, float> distances_t;
     std::list<int> terms_after_ready, terms_before_ready;
     bool ready = false; 
 

@@ -23,7 +23,7 @@ TEST_CASE("adaptive_level1") {
   std::vector<std::pair<int,int>> edges {std::make_pair(0,1), 
                                          std::make_pair(0,2), 
                                          std::make_pair(1,2)};
-  std::vector<double> weights {1,1,0.9};
+  std::vector<float> weights {1,1,0.9};
   std::vector<int> terms {1,2};
   DST dt = DST(edges, weights, 0, terms);
 
@@ -57,7 +57,7 @@ TEST_CASE("level1") {
                                          std::make_pair(3,4), 
                                          std::make_pair(4,3), 
                                          std::make_pair(3,5)};
-  std::vector<double> weights {1,1,1,0.9,1,1,1};
+  std::vector<float> weights {1,1,1,0.9,1,1,1};
   std::vector<int> terms {2,3,5};
   DST dt = DST(edges, weights, 0, terms);
 
@@ -91,7 +91,7 @@ TEST_CASE("CoordinatedDijkstra") {
                                          std::make_pair(2,12), 
                                          std::make_pair(2,13), 
                                          std::make_pair(11,12)};
-  std::vector<double> weights {1,1, 2,4,2.5, 1};
+  std::vector<float> weights {1,1, 2,4,2.5, 1};
   std::vector<int> terms {11,12,13};
   DST dt = DST(edges, weights, 0, terms);
 
@@ -145,12 +145,12 @@ TEST_CASE("dijkstra") {
                                          std::make_pair(1,2), 
                                          std::make_pair(3,4), 
                                          std::make_pair(4,3)};
-  std::vector<double> weights {1,1,1,1,1,1};
+  std::vector<float> weights {1,1,1,1,1,1};
   std::vector<int> terms {};
   DST dt = DST(edges, weights, 0, terms);
 
   auto [dists, trace] = dijkstra(dt.graph.fwd_offset, dt.graph.fwd_target,
-                                  dt.graph.fwd_weight, dt.graph.n, 0);
+                                  dt.graph.fwd_weight, 0);
   CHECK(dists->at(0) == 0);
   CHECK(dists->at(1) == 1);
   CHECK(dists->at(2) == 1);
@@ -159,7 +159,7 @@ TEST_CASE("dijkstra") {
   CHECK(trace->at(4) == 3);
 
   std::tie(dists, trace) = dijkstra(dt.graph.fwd_offset, dt.graph.fwd_target,
-                                     dt.graph.fwd_weight, dt.graph.n, 4);
+                                     dt.graph.fwd_weight, 4);
   CHECK (dists->find(0) == dists->end());
   CHECK (dists->find(1) == dists->end());
   CHECK (dists->find(2) == dists->end());
@@ -167,7 +167,7 @@ TEST_CASE("dijkstra") {
   CHECK (dists->at(4) == 0);
 
   std::tie(dists, trace) = dijkstra(dt.graph.rev_offset, dt.graph.rev_target,
-                                     dt.graph.rev_weight, dt.graph.n, 4);
+                                     dt.graph.rev_weight, 4);
   CHECK (dists->at(0) == 2);
   CHECK (dists->find(1) == dists->end());
   CHECK (dists->find(2) == dists->end());
@@ -178,11 +178,11 @@ TEST_CASE("dijkstra") {
   CHECK (trace->find(2) == trace->end());
 
   auto p4 = dijkstra(dt.graph.fwd_offset, dt.graph.fwd_target,
-                      dt.graph.fwd_weight, dt.graph.n, 0, {3});
+                      dt.graph.fwd_weight, 0, {3});
   CHECK (not has_key(*std::get<0>(p4), 4));
 
   std::tie(dists, trace) = dijkstra_multisource(dt.graph.fwd_offset, dt.graph.fwd_target,
-                                                 dt.graph.fwd_weight, dt.graph.n, {1, 3});
+                                                 dt.graph.fwd_weight, {1, 3});
   CHECK(dists->find(0) == dists->end());  // 0 not reachable
   CHECK(dists->at(1) == 0);
   CHECK(dists->at(3) == 0);

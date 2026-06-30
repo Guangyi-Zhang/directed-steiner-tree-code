@@ -33,7 +33,7 @@ TEST_CASE("sssp_nodes_visited") {
                                          std::make_pair(2,11), 
                                          std::make_pair(2,12), 
                                          };
-  std::vector<double> weights {1,1, 99,1,1};
+  std::vector<float> weights {1,1, 99,1,1};
   int root = 0;
   std::vector<int> terms {11,12};
   DST dt = DST(edges, weights, root, terms);
@@ -304,7 +304,7 @@ TEST_CASE("crossing") {
                                          std::make_pair(2,22), 
                                          std::make_pair(2,23)
                                          };
-  std::vector<double> weights {1,1, 0.2,0.2, 3,3,1};
+  std::vector<float> weights {1,1, 0.2,0.2, 3,3,1};
   std::vector<int> terms {21,22,23};
   DST dt = DST(edges, weights, 0, terms);
 
@@ -332,7 +332,7 @@ TEST_CASE("cycles") {
                                          std::make_pair(3,4), 
                                          std::make_pair(4,5),
                                          std::make_pair(5,0)};
-  std::vector<double> weights {1,1,1,1,1,1};
+  std::vector<float> weights {1,1,1,1,1,1};
   std::vector<int> terms {2,4};
   DST dt = DST(edges, weights, 0, terms);
 
@@ -358,7 +358,7 @@ TEST_CASE("fast_level2") {
                                          
                                          std::make_pair(0,5), 
                                          };
-  std::vector<double> weights {1,1,1,1,1,1};
+  std::vector<float> weights {1,1,1,1,1,1};
   int root = 0;
   std::vector<int> terms {5};
   DST dt = DST(edges, weights, root, terms);
@@ -399,7 +399,7 @@ TEST_CASE("adaptive_level2_reuses_root_side_distance") {
                                          std::make_pair(1,2),
                                          std::make_pair(2,21),
                                          std::make_pair(2,22)};
-  std::vector<double> weights {4,1,5,1,1};
+  std::vector<float> weights {4,1,5,1,1};
   std::vector<int> terms {11,21,22};
   DST dt = DST(edges, weights, 0, terms);
 
@@ -455,7 +455,7 @@ TEST_CASE("full_adaptive_level2_reuses_terminal_side_residual_paths") {
                                          std::make_pair(6,3),
                                          std::make_pair(6,4),
                                          std::make_pair(6,5)};
-  std::vector<double> weights {8,2,4,1,6,4,8,6,4,1,6,2};
+  std::vector<float> weights {8,2,4,1,6,4,8,6,4,1,6,2};
   std::vector<int> terms {4,5,6};
   DST dt = DST(edges, weights, 0, terms);
 
@@ -495,7 +495,7 @@ TEST_CASE("level2_alg") {
                                          std::make_pair(4,11), 
                                          std::make_pair(4,12), 
                                          std::make_pair(4,13)};
-  std::vector<double> weights {1,1,1,2.5, 2,2,2, 1,1,1};
+  std::vector<float> weights {1,1,1,2.5, 2,2,2, 1,1,1};
   std::vector<int> terms {11,12,13};
   DST dt = DST(edges, weights, 0, terms);
 
@@ -547,8 +547,8 @@ TEST_CASE("best_level2_prefix_length with plain vector thresholds") {
 
   // Terminals with weights [1, 2, 4]: prefix_sums [1, 3, 7]
   // theta(1) = 1*2 - 1 = 1, theta(2) = 2*4 - 3 = 5
-  std::vector<double> weights {1, 2, 4};
-  std::vector<double> prefix_sums {1, 3, 7};
+  std::vector<float> weights {1, 2, 4};
+  std::vector<float> prefix_sums {1, 3, 7};
   auto thr = [&](int q) {
     return level2_threshold(q, weights[q], prefix_sums[q-1]);
   };
@@ -757,7 +757,7 @@ TEST_CASE("fast_level2 and adaptive_fast_level2 single behavior") {
     {1,11}, {2,12}, {3,13},
     {4,11}, {4,12}, {4,13}
   };
-  std::vector<double> weights {1,1,1,2.5, 2,2,2, 1,1,1};
+  std::vector<float> weights {1,1,1,2.5, 2,2,2, 1,1,1};
   std::vector<int> terms {11,12,13};
   DST dt = DST(edges, weights, 0, terms);
 
@@ -794,7 +794,7 @@ TEST_CASE("single behavior on adaptive root distance graph") {
   std::vector<std::pair<int,int>> edges {
     {0,1}, {1,11}, {1,2}, {2,21}, {2,22}
   };
-  std::vector<double> weights {4,1,5,1,1};
+  std::vector<float> weights {4,1,5,1,1};
   std::vector<int> terms {11,21,22};
   DST dt = DST(edges, weights, 0, terms);
 
@@ -1023,7 +1023,7 @@ TEST_CASE("full_adaptive_fast_level2 single behavior") {
     {1,11}, {2,12}, {3,13},
     {4,11}, {4,12}, {4,13}
   };
-  std::vector<double> weights {1,1,1,2.5, 2,2,2, 1,1,1};
+  std::vector<float> weights {1,1,1,2.5, 2,2,2, 1,1,1};
   std::vector<int> terms {11,12,13};
   DST dt = DST(edges, weights, 0, terms);
 
@@ -1053,7 +1053,7 @@ TEST_CASE("full_adaptive_fast_level2 on adaptive root distance graph") {
   std::vector<std::pair<int,int>> edges {
     {0,1}, {1,11}, {1,2}, {2,21}, {2,22}
   };
-  std::vector<double> weights {4,1,5,1,1};
+  std::vector<float> weights {4,1,5,1,1};
   std::vector<int> terms {11,21,22};
   DST dt = DST(edges, weights, 0, terms);
 
@@ -1083,7 +1083,7 @@ TEST_CASE("full_adaptive_fast_level2 on residual-path graph") {
     {1,2}, {2,5}, {5,3}, {3,6},
     {2,7}
   };
-  std::vector<double> weights {1,1,1, 2,1,1,1, 3};
+  std::vector<float> weights {1,1,1, 2,1,1,1, 3};
   std::vector<int> terms {6,7};
   DST dt = DST(edges, weights, 0, terms);
 

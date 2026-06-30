@@ -122,7 +122,7 @@ TEST_CASE("stop_picking_next_2partree") {
                                          std::make_pair(14,27), 
                                          std::make_pair(14,28), 
                                          };
-  std::vector<double> weights {1,1, 1,1,1,1, 1,1,1,1,1,1,0.9,100};
+  std::vector<float> weights {1,1, 1,1,1,1, 1,1,1,1,1,1,0.9,100};
   std::vector<int> terms {21,22,23,24,25,26,27,28};
   DST dt = DST(edges, weights, 0, terms);
 
@@ -140,8 +140,8 @@ TEST_CASE("stop_picking_next_2partree") {
   next u 2, costsc 5.9, cov 3
   next u 14, costsc 102, cov 1
   */
-  std::vector<double> costs {7, 5.9, 100};
-  std::vector<double> dens {7/4.0, 5.9/3, 100};
+  std::vector<float> costs {7, 5.9, 100};
+  std::vector<float> dens {7/4.0, 5.9/3, 100};
   auto tree3 = dt.level3_alg();
   CHECK(tree3->to_tree()->cost == doctest::Approx(2+4+6.9+100).epsilon(1e-6));
   CHECK(tree3->cost_sc == doctest::Approx((1+2+4) + (4+1.9) + 100).epsilon(1e-6));
@@ -189,7 +189,7 @@ TEST_CASE("two_3level_partrees") {
                                          std::make_pair(14,27), 
                                          std::make_pair(14,28), 
                                          };
-  std::vector<double> weights {1,1, 1,1,1,1, 1,1,1,1,1,1,1,1};
+  std::vector<float> weights {1,1, 1,1,1,1, 1,1,1,1,1,1,1,1};
   std::vector<int> terms {21,22,23,24,25,26,27,28};
   DST dt = DST(edges, weights, 0, terms);
 
@@ -238,7 +238,7 @@ TEST_CASE("level3_alg") {
                                          std::make_pair(11,22), 
                                          std::make_pair(12,23), 
                                          std::make_pair(12,24)};
-  std::vector<double> weights {2,2,4, 2,2,2,2, 1.5,1.5, 1,1,1,1};
+  std::vector<float> weights {2,2,4, 2,2,2,2, 1.5,1.5, 1,1,1,1};
   std::vector<int> terms {21,22,23,24};
   DST dt = DST(edges, weights, 0, terms);
 
