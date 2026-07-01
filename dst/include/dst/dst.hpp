@@ -697,11 +697,9 @@ namespace dst {
         return par;
       }
 
-      // One index per center v: terminals inserted in nondecreasing d(v,t) order.
+      // One lazily allocated index per root-reachable center v: terminals are
+      // inserted in nondecreasing d(v,t) order.
       std::unordered_map<int, AdaptiveLevel2CenterIndex> center_idxs;
-      for (int v = 0; v < n_original; v++) {
-        center_idxs.emplace(v, AdaptiveLevel2CenterIndex(v, terms_dm.size()));
-      }
 
       // Terminal-side search runs once for the whole algorithm run.
       CoordinatedDijkstra cosssp {graph.rev_offset, graph.rev_target,
@@ -734,6 +732,34 @@ namespace dst {
         return better_prefix(bound.density, bound.nterm, best_density, best_nterm);
       };
 
+      // Get or create the center index for vertex v, lazily populated from cosssp distances
+      auto ensure_center = [&] (int v) -> AdaptiveLevel2CenterIndex& {
+        // Try to emplace; `inserted` is true only if v is new to the map
+        auto [it, inserted] = center_idxs.emplace(
+            std::piecewise_construct,
+            std::forward_as_tuple(v),
+            std::forward_as_tuple(v, static_cast<int>(terms_dm.size()))
+        );
+        // Already exists → return existing entry without re-initializing
+        if (!inserted)
+          return it->second;
+
+        // Collect (distance, terminal) pairs for v from cosssp, filtered to remaining terms
+        std::vector<std::pair<double, int>> discovered;
+        for (auto &p: *(cosssp.distances_t)) {
+          int t = p.first;
+          if (not has_key(terms_left, t) or not has_key(*(p.second), v))
+            continue;
+          discovered.emplace_back(p.second->at(v), t);
+        }
+        // Sort by distance ascending and populate the new center index
+        std::sort(discovered.begin(), discovered.end());
+        for (auto &[d_vt, t]: discovered)
+          it->second.insert(t, d_vt);
+
+        return it->second;
+      };
+
       while (terms_left.size() > 0) {
         // Root-side residual distances from vertices already in the partial tree.
         auto sources = tree_vertices(par->totree);
@@ -759,13 +785,14 @@ namespace dst {
         };
 
         // Initialize the survivors list and the best center
-        for (auto &p: center_idxs) {
+        for (auto &p: *dists_r) {
           int v = p.first;
-          if (not has_key(*dists_r, v))
+          if (v >= n_original)
             continue;
+          auto &idx = ensure_center(v);
           survivors.push_back(v);
           survivors_set.insert(v);
-          auto cand = p.second.discovered_bound(dists_r->at(v));
+          auto cand = idx.discovered_bound(p.second);
           if (better_prefix(cand.density, cand.nterm, best_density, best_nterm)) {
             best_v = v;
             best_density = cand.density;
@@ -809,8 +836,9 @@ namespace dst {
           }
 
           terminal_lb = d_vt;
-          if (has_key(center_idxs, v) and has_key(*dists_r, v)) {
-            center_idxs.at(v).insert(t, d_vt);
+          if (v < n_original and has_key(*dists_r, v)) {
+            auto &idx = ensure_center(v);
+            idx.insert(t, d_vt);
             if (has_key(survivors_set, v)) // v is still a survivor
               refresh_center(v);
           }
