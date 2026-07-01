@@ -692,6 +692,11 @@ namespace dst {
       auto par = std::make_shared<PartialTreeManager> (root);
       par->trace_t = nullptr;
       std::unordered_set<int> terms_left(terms_dm.begin(), terms_dm.end());
+      if (terms_left.empty()) {
+        par->debuginfo["sssp_nodes_visited"] = "0";
+        return par;
+      }
+
       // One index per center v: terminals inserted in nondecreasing d(v,t) order.
       std::unordered_map<int, AdaptiveLevel2CenterIndex> center_idxs;
       for (int v = 0; v < n_original; v++) {
