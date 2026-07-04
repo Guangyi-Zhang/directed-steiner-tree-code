@@ -26,12 +26,13 @@ namespace dst {
   };
 
   // Threshold for adding the (q+1)-th terminal to a prefix of q terminals:
-  // adding helps iff threshold(q) <= d_rv.
+  // adding strictly helps iff threshold(q) < d_rv.
   inline double level2_threshold(int q, double next_weight, double prefix_weight) {
     return q * next_weight - prefix_weight;
   }
 
-  // Binary search for the longest level-2 prefix with threshold(q) <= d_rv.
+  // Binary search for the longest level-2 prefix with threshold(q) < d_rv.
+  // Equal-density extensions are left out so ties prefer smaller partial trees.
   // Each index class passes its own threshold callback.
   template <class ThresholdFn>
   int best_level2_prefix_length(int total_terms, double d_rv, ThresholdFn threshold) {
@@ -41,7 +42,7 @@ namespace dst {
     int left = 1, right = total_terms - 1;
     while (left <= right) {
       int mid = left + (right - left) / 2;
-      if (leq(threshold(mid), d_rv)) {
+      if (lq(threshold(mid), d_rv)) {
         best_q = mid;
         left = mid + 1;
       } else {
@@ -96,7 +97,7 @@ namespace dst {
     void add_term(int t, double d_vt) {
       distances_t[t] = d_vt;
       double new_den = (cost_sc + d_vt) / (terms.size() + 1);
-      if (ready or lq(density(), new_den)) {
+      if (ready or leq(density(), new_den)) {
         ready = true;
         terms_after_ready.push_back(t);
       } else {
@@ -157,8 +158,8 @@ namespace dst {
       terms_before_ready.clear();
       terms_after_ready.clear();
 
-      // re-add items in order
-      // no need to iterate t's in terms_after_ready
+      // Re-add items in order, then reconsider the first deferred terminal so
+      // ready stays true when the next terminal no longer strictly improves density.
       std::list<int> terms_excluded;
       for (auto t: terms_before_ready_cp) {
         if (not has_key(terms_cp, t)) 
@@ -171,6 +172,16 @@ namespace dst {
       }
       terms_after_ready.splice(terms_after_ready.end(), terms_excluded);
       terms_after_ready.splice(terms_after_ready.end(), terms_after_ready_cp);
+      while (not ready and not terms_after_ready.empty()) {
+        auto t = terms_after_ready.front();
+        terms_after_ready.pop_front();
+
+        add_term(t, distances_t.at(t));
+        if (ready) {
+          terms_after_ready.pop_back();
+          terms_after_ready.push_front(t);
+        }
+      }
     }
 
     double density_LB(int k, double d_vt_lb=0) {
@@ -399,7 +410,7 @@ namespace dst {
       double full_density = (C + unknown * terminal_lb) / k;
 
       Level2PruneBound bound;
-      if (leq(full_density, current_density)) {
+      if (lq(full_density, current_density)) {
         bound.density = full_density;
         bound.nterm = k;
       } else {
@@ -460,7 +471,7 @@ namespace dst {
       // extending it by one without a full binary search.
       if (cache_valid and cached_nterm == old_m) {
         double thr = level2_threshold(old_m, d_vt, cached_prefix_weight);
-        if (leq(thr, cached_d_rv)) {
+        if (lq(thr, cached_d_rv)) {
           cached_nterm = m_alive;
           cached_prefix_weight += d_vt;
           cached_density = (cached_d_rv + cached_prefix_weight) / cached_nterm;
@@ -599,7 +610,7 @@ namespace dst {
       double full_density = (d_rv + w_alive + unknown * terminal_lb) / total;
 
       Level2PruneBound bound;
-      if (leq(full_density, cached_density)) {
+      if (lq(full_density, cached_density)) {
         bound.density = full_density;
         bound.nterm = total;
       } else {

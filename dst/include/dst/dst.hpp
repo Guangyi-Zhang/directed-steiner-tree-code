@@ -212,11 +212,11 @@ namespace dst {
         auto idx = idxs[i];
         auto t = terms_left_v[idx];
         double den_i = (tree->cost_sc + ds_vt[idx]) / (i+1);
-        if (i == 0 or leq(den_i, tree->density())) {
+        if (i == 0 or lq(den_i, tree->density())) {
           tree->add_term(t, ds_vt[idx]);
         }
         else
-          break; // stop once adding a t increases den_v
+          break; // stop once adding a t does not strictly decrease den_v
       }
 
       return tree;
@@ -296,7 +296,7 @@ namespace dst {
             if (v_best == NONVERTEX or
                 lq(idx.density(), center_idxs.at(v_best).density()) or
                 (eq(idx.density(), center_idxs.at(v_best).density()) and
-                 idx.tree.terms.size() > center_idxs.at(v_best).tree.terms.size()))
+                 idx.tree.terms.size() < center_idxs.at(v_best).tree.terms.size()))
               v_best = idx.tree.v;
           }
           if (center_idxs.at(v_best).tree.terms.size() == 0)
@@ -316,7 +316,7 @@ namespace dst {
         auto &idx_best_old = center_idxs.at(v_best);
         if(idx_v.density() < idx_best_old.density() or
            (eq(idx_v.density(), idx_best_old.density()) and
-            idx_v.tree.terms.size() > idx_best_old.tree.terms.size())) {
+            idx_v.tree.terms.size() < idx_best_old.tree.terms.size())) {
           v_best = v;
         }
         auto &idx_best = center_idxs.at(v_best);
@@ -408,7 +408,7 @@ namespace dst {
           if (best == nullptr or
               tree_v->density() < best->density() or // breaking tie
               (std::abs(tree_v->density() - best->density()) < EPSILON and
-               tree_v->terms.size() > best->terms.size())) {
+               tree_v->terms.size() < best->terms.size())) {
             best = tree_v;
           }
         }
@@ -506,7 +506,7 @@ namespace dst {
           if (best == nullptr or
               tree_v->density() < best->density() or
               (eq(tree_v->density(), best->density()) and
-               tree_v->terms.size() > best->terms.size())) {
+               tree_v->terms.size() < best->terms.size())) {
             best = tree_v;
           }
         }
@@ -563,7 +563,7 @@ namespace dst {
           if (best == nullptr or
               tree_v->density() < best->density() or
               (eq(tree_v->density(), best->density()) and
-               tree_v->terms.size() > best->terms.size())) {
+               tree_v->terms.size() < best->terms.size())) {
             best = tree_v;
           }
         }
@@ -615,7 +615,7 @@ namespace dst {
         auto &idx_best = center_idxs.at(v_best);
         if (idx_v.density() < idx_best.density() or
             (eq(idx_v.density(), idx_best.density()) and
-             idx_v.tree.terms.size() > idx_best.tree.terms.size())) {
+             idx_v.tree.terms.size() < idx_best.tree.terms.size())) {
           v_best = v;
         }
       };
@@ -709,7 +709,7 @@ namespace dst {
       double terminal_lb = 0; // frontier distance from cosssp; lower-bounds undiscovered d(v,t)
       bool terminal_search_exhausted = false;
 
-      // Function: prefer lower density; tie-break by covering more terminals.
+      // Function: prefer lower density; tie-break by covering fewer terminals.
       auto better_prefix = [](
           double a_density,
           int a_nterm,
@@ -721,7 +721,7 @@ namespace dst {
         if (b_nterm == 0)
           return true;
         return a_density < b_density or
-               (eq(a_density, b_density) and a_nterm > b_nterm);
+               (eq(a_density, b_density) and a_nterm < b_nterm);
       };
 
       auto bound_can_beat = [&](

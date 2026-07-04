@@ -124,18 +124,17 @@ TEST_CASE("AdaptiveLevel2CenterIndex builds threshold prefix and erases") {
   idx.insert(102, 2); // duplicate discoveries are ignored
 
   CHECK(idx.alive_discovered_count() == 3);
-  CHECK(idx.best_prefix_length(1) == 2);
+  CHECK(idx.best_prefix_length(1) == 1);
 
   auto bound = idx.discovered_bound(1);
-  CHECK(bound.nterm == 2);
+  CHECK(bound.nterm == 1);
   CHECK(eq(bound.density, 2));
 
   auto tree = idx.partree(0, 1);
   CHECK(tree->v == 7);
-  CHECK(eq(tree->cost_sc, 4));
-  CHECK((tree->terms == std::unordered_set<int> {101, 102}));
+  CHECK(eq(tree->cost_sc, 2));
+  CHECK((tree->terms == std::unordered_set<int> {101}));
   CHECK(eq(tree->distances_t.at(101), 1));
-  CHECK(eq(tree->distances_t.at(102), 2));
 
   idx.erase({101, 999});
   CHECK(idx.alive_discovered_count() == 2);
@@ -187,7 +186,6 @@ TEST_CASE("PartialTree3") {
 
   int root {0}, v {1};
   double d_rv {1};
-  int k = 5;
   PartialTree tree {root, v, d_rv};
 
   tree.add_term(11, 1); // density = 2/1
@@ -198,13 +196,13 @@ TEST_CASE("PartialTree3") {
 
   PartialTree tree2 {root, v, d_rv};
   tree2.add_term(11, 1); // density = 2/1
-  tree2.add_term(12, 2); // density = 4/2
+  tree2.add_term(12, 2); // density = 4/2, equal to current density, so stop
   tree2.add_term(13, 4); // density = 8/3
   CHECK(tree2.is_ready());
-  CHECK(tree2.terms_after_ready.size() == 1);
+  CHECK(tree2.terms_after_ready.size() == 2);
   tree2.zero_drv();
   CHECK(tree2.is_ready());
-  CHECK(eq(tree.density(), 1));
+  CHECK(eq(tree2.density(), 1));
   CHECK(tree2.terms_after_ready.size() == 2);
   CHECK(tree2.terms_after_ready.front() == 12);
 }
@@ -224,15 +222,15 @@ TEST_CASE("PartialTree2") {
 
   tree.add_term(11, 1); // density = 2/1
   CHECK(eq(tree.density_LB(k,1), (1.0+k)/k));
-  tree.add_term(12, 2); // density = 4/2
-  CHECK(not tree.is_ready());
+  tree.add_term(12, 2); // density = 4/2, equal to current density, so stop
+  CHECK(tree.is_ready());
   CHECK(eq(tree.density_LB(k,2), (1.0+1+(k-1)*2)/k));
   tree.add_term(13, 4); // density = 8/3
   CHECK(tree.is_ready());
   CHECK(eq(tree.density(), 2));
   CHECK(eq(tree.density_LB(k,4), tree.density()));
-  CHECK(tree.terms.size() == 2);
-  CHECK(tree.terms_after_ready.size() == 1);
+  CHECK(tree.terms.size() == 1);
+  CHECK(tree.terms_after_ready.size() == 2);
 
   tree.erase_and_reset({11}); // density = (1+2)/1
   CHECK(tree.is_ready());
@@ -257,14 +255,14 @@ TEST_CASE("PartialTree") {
 
   tree.add_term(11, 1); // density = 2/1
   CHECK(eq(tree.density_LB(k,1), (1.0+k)/k));
-  tree.add_term(12, 2); // density = 4/2
-  CHECK(not tree.is_ready());
+  tree.add_term(12, 2); // density = 4/2, equal to current density, so stop
+  CHECK(tree.is_ready());
   CHECK(eq(tree.density_LB(k,2), (1.0+1+(k-1)*2)/k));
   tree.add_term(13, 3); // density = 7/3
   CHECK(tree.is_ready());
   CHECK(eq(tree.density(), 2));
   CHECK(eq(tree.density_LB(k,3), tree.density()));
-  CHECK(tree.terms.size() == 2);
+  CHECK(tree.terms.size() == 1);
 
   tree.erase_and_reset({11, 12});
   CHECK(not tree.is_ready());
@@ -273,12 +271,13 @@ TEST_CASE("PartialTree") {
   CHECK(tree.terms.size() == 1);
 
   tree.add_term(14, 4); // density = (1+3+4)/2
-  CHECK(eq(tree.density_LB(k,4), (1.0+3+(k-1)*4)/k));
+  CHECK(tree.is_ready());
+  CHECK(eq(tree.density_LB(k,4), tree.density()));
   tree.add_term(14, 5); // density = (1+3+4+5)/3
   CHECK(tree.is_ready());
   CHECK(eq(tree.density(), 4));
   CHECK(eq(tree.density_LB(k,4), tree.density()));
-  CHECK(tree.terms.size() == 2);
+  CHECK(tree.terms.size() == 1);
 }
 
 
@@ -439,9 +438,10 @@ TEST_CASE("full_adaptive_level2_reuses_terminal_side_residual_paths") {
     always 2, so after {6} is covered, {5} alone through v=6 has density 2.
     Bunching {4,5} needs a shared middle vertex; through v=0 that costs
     d_4(0)+d_5(0)=2+3=5 (density 2.5). 
-    full_adaptive_level2 takes two bunches: {6}, then {4,5} through v=0.
+    Under the prefer-fewer-terminals tie rule, full_adaptive_level2 still takes
+    three bunches: {6}, then one of {4,5}, then the other.
     Residual weights zero out 0->6, so the terminal-side distance d_5(0)
-    drops to 2 via 5->6->0 and bunching {4,5} reaches density 2 as well.
+    drops to 2 via 5->6->0, but bunching {4,5} only ties density 2.
   */
   std::vector<std::pair<int,int>> edges {std::make_pair(0,2),
                                          std::make_pair(0,4),
@@ -474,10 +474,10 @@ TEST_CASE("full_adaptive_level2_reuses_terminal_side_residual_paths") {
   CHECK(fast2->subtrees.size() == 3);
   CHECK(adaptive2->subtrees.size() == 3);
   CHECK(adaptive_fast2->subtrees.size() == 3);
-  CHECK(full_adaptive2->subtrees.size() == 2);
-  CHECK(full_adaptive_fast2->subtrees.size() == 2);
-  CHECK(full_adaptive2->subtrees.back().first->terms.size() == 2);
-  CHECK(full_adaptive_fast2->subtrees.back().first->terms.size() == 2);
+  CHECK(full_adaptive2->subtrees.size() == 3);
+  CHECK(full_adaptive_fast2->subtrees.size() == 3);
+  CHECK(full_adaptive2->subtrees.back().first->terms.size() == 1);
+  CHECK(full_adaptive_fast2->subtrees.back().first->terms.size() == 1);
 }
 
 
@@ -553,10 +553,10 @@ TEST_CASE("best_level2_prefix_length with plain vector thresholds") {
     return level2_threshold(q, weights[q], prefix_sums[q-1]);
   };
 
-  // best_level2_prefix_length(int total_terms, double d_rv, ThresholdFn threshold) 
+  // Equal thresholds keep the shorter prefix.
   CHECK(best_level2_prefix_length(3, 0, thr) == 1);
-  CHECK(best_level2_prefix_length(3, 1, thr) == 2);
-  CHECK(best_level2_prefix_length(3, 5, thr) == 3);
+  CHECK(best_level2_prefix_length(3, 1, thr) == 1);
+  CHECK(best_level2_prefix_length(3, 5, thr) == 2);
   CHECK(best_level2_prefix_length(3, 100, thr) == 3);
 
   auto dummy = [](int) { return 0.0; };
@@ -572,11 +572,11 @@ TEST_CASE("Level2CenterIndex ready center certifies the discovered prefix") {
   idx.add_term(102, 2);
   idx.add_term(103, 4);
 
-  // After adding 103, tree becomes ready with prefix {101,102}, cost_sc=4.
-  // The discovered rejected terminal (103) proves the prefix is exact, so the
+  // After adding 102, tree becomes ready with prefix {101}, cost_sc=2 because
+  // the second terminal only ties the current density. The discovered rejected terminal proves the
   // certificate uses the current prefix density regardless of the tail.
   auto bound = idx.optimistic_bound(1.0, 3, 0, true);
-  CHECK(bound.nterm == 2);
+  CHECK(bound.nterm == 1);
   CHECK(eq(bound.density, 2.0));
 }
 
@@ -977,7 +977,7 @@ TEST_CASE("AdaptiveLevel2CenterIndex certificate matches expected on multiple co
     idx.insert(102, 4);
     idx.discovered_bound(1.0);
     auto r = idx.optimistic_bound(1.0, 3, 0, true);
-    CHECK(r.nterm == 2);
+    CHECK(r.nterm == 1);
     CHECK(eq(r.density, 2.0));
   }
 

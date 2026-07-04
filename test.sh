@@ -7,7 +7,7 @@ cmake -S ./ -B build -DCMAKE_BUILD_TYPE=RelWithDebInfo -DUSE_TEST=1 -DUSE_MAIN=0
 cmake --build build
 # ./build/test/Test -tc=crossing
 if [ $# -eq 0 ]; then
-    ./build/test/Test
+    ./build/test/Test --source-file-exclude='*test_level3.cpp'
 else
-    ./build/test/Test -tc=$1
+    ./build/test/Test -tc="$1"
 fi

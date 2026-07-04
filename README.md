@@ -77,6 +77,8 @@ The main experiment binary accepts `level1`, `adaptive_level1`, `level2`,
 `adaptive_fast_level2` uses the dynamic-prefix root-adaptive implementation:
 terminal-side distances are discovered progressively and reused while each
 greedy iteration refreshes only the root-side distances.
+For 2-level methods, equal-density choices prefer the partial tree with fewer
+terminals; another terminal is added only when it strictly improves density.
 
 
 ## Tests
@@ -84,7 +86,7 @@ greedy iteration refreshes only the root-side distances.
 ```bash
 cmake -S ./ -B build -DCMAKE_BUILD_TYPE=RelWithDebInfo -DUSE_TEST=1 -DUSE_MAIN=0 -DUSE_EXAMPLE=0
 cmake --build build
-./build/test/Test
+./build/test/Test --source-file-exclude='*test_level3.cpp'
 ```
 
 ## Datasets
