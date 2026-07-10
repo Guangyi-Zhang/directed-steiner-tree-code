@@ -620,6 +620,27 @@ namespace dst {
       return bound;
     }
 
+    bool discovered_prefix_is_exact(
+        double d_rv,
+        int total_alive_terms,
+        double terminal_lb,
+        bool terminal_search_exhausted
+    ) {
+      auto discovered = discovered_bound(d_rv);
+      auto optimistic = optimistic_bound(
+          d_rv,
+          total_alive_terms,
+          terminal_lb,
+          terminal_search_exhausted
+      );
+
+      if (discovered.nterm != optimistic.nterm)
+        return false;
+      if (discovered.nterm == 0)
+        return true;
+      return eq(discovered.density, optimistic.density);
+    }
+
     // Build PartialTree(root, v, d_rv) with the best discovered alive prefix.
     auto partree(int root, double d_rv) {
       if (!cache_valid || !eq(cached_d_rv, d_rv))

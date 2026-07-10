@@ -43,6 +43,7 @@ auto main(int argc, char** argv) -> int {
     ("n,thresholds", "thresholds", cxxopts::value<int>()->default_value("10"))
     ("t,note", "note", cxxopts::value<std::string>()->default_value("none"))
     ("l,logfile", "log file", cxxopts::value<std::string>()->default_value("logs/basic-log.txt"))
+    ("rerank-l", "rerank_L for level2 reranking", cxxopts::value<int>()->default_value("5"))
   ;
   auto opresult = options.parse(argc, argv);
 
@@ -59,6 +60,11 @@ auto main(int argc, char** argv) -> int {
   int rep = opresult["rep"].as<int>();
   int version = opresult["version"].as<int>();
   int seed = opresult["seed"].as<int>();
+  int rerank_L = opresult["rerank-l"].as<int>();
+  if (rerank_L < 1) {
+    spdlog::error("rerank-l must be >= 1, got {}", rerank_L);
+    return 1;
+  }
 
   if (seed == -1)
     seed = time(nullptr);
@@ -269,22 +275,22 @@ auto main(int argc, char** argv) -> int {
     debuginfo = &(partree->debuginfo);
   }
   else if (method.compare("adaptive_level2") == 0 or method.compare("root_adaptive_level2") == 0) {
-    partree = dt.adaptive_level2_alg();
+    partree = dt.adaptive_level2_alg(rerank_L);
     tree = partree->to_tree();
     debuginfo = &(partree->debuginfo);
   }
   else if (method.compare("adaptive_fast_level2") == 0 or method.compare("root_adaptive_fast_level2") == 0) {
-    partree = dt.adaptive_fast_level2_alg();
+    partree = dt.adaptive_fast_level2_alg(rerank_L);
     tree = partree->to_tree();
     debuginfo = &(partree->debuginfo);
   }
   else if (method.compare("full_adaptive_level2") == 0) {
-    partree = dt.full_adaptive_level2_alg();
+    partree = dt.full_adaptive_level2_alg(rerank_L);
     tree = partree->to_tree();
     debuginfo = &(partree->debuginfo);
   }
   else if (method.compare("full_adaptive_fast_level2") == 0) {
-    partree = dt.full_adaptive_fast_level2_alg();
+    partree = dt.full_adaptive_fast_level2_alg(rerank_L);
     tree = partree->to_tree();
     debuginfo = &(partree->debuginfo);
   }
@@ -342,6 +348,16 @@ auto main(int argc, char** argv) -> int {
   d.AddMember("n_cov", rapidjson::Value(tree->terms_cov.size()), a); 
   d.AddMember("runtime", rapidjson::Value(time_elapsed_ms), a); 
   d.AddMember("sssp_nodes_visited", rapidjson::Value(std::stoi(debuginfo->at("sssp_nodes_visited"))), a); 
+  if (has_key(*debuginfo, "rerank_mode"))
+    d.AddMember("rerank_mode", rapidjson::Value(rapidjson::StringRef(debuginfo->at("rerank_mode").c_str())), a);
+  if (has_key(*debuginfo, "certificate_L"))
+    d.AddMember("certificate_L", rapidjson::Value(std::stoi(debuginfo->at("certificate_L"))), a);
+  if (has_key(*debuginfo, "rerank_L"))
+    d.AddMember("rerank_L", rapidjson::Value(std::stoi(debuginfo->at("rerank_L"))), a);
+  if (has_key(*debuginfo, "rerank_candidates_evaluated"))
+    d.AddMember("rerank_candidates_evaluated", rapidjson::Value(std::stoi(debuginfo->at("rerank_candidates_evaluated"))), a);
+  if (has_key(*debuginfo, "rerank_realized_delta_calls"))
+    d.AddMember("rerank_realized_delta_calls", rapidjson::Value(std::stoi(debuginfo->at("rerank_realized_delta_calls"))), a);
   d.AddMember("mem", rapidjson::Value(rss), a); 
 
 #ifdef NO_FAST2_LB

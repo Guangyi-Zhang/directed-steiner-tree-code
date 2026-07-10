@@ -77,8 +77,15 @@ The main experiment binary accepts `level1`, `adaptive_level1`, `level2`,
 `adaptive_fast_level2` uses the dynamic-prefix root-adaptive implementation:
 terminal-side distances are discovered progressively and reused while each
 greedy iteration refreshes only the root-side distances.
-For 2-level methods, equal-density choices prefer the partial tree with fewer
-terminals; another terminal is added only when it strictly improves density.
+For exact adaptive 2-level methods, each greedy iteration keeps the top 5
+scored-density candidates by default and reranks that shortlist by realized
+marginal density.  Fast adaptive 2-level methods certify only the top scored
+candidate, then rerank a bounded pool of concrete observed prefixes discovered
+during that certificate.  Scored pools are ordered by lower scored density,
+fewer terminals, then lower center id; realized reranking uses lower realized
+density with the same scored tie keys.  Pass `rerank_L = 1` to the C++ API to
+recover single-candidate scored selection.  Another terminal is added only when
+it strictly improves scored density.
 
 
 ## Tests

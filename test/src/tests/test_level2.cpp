@@ -534,6 +534,89 @@ TEST_CASE("level2_alg") {
 }
 
 
+TEST_CASE("partree_realized_delta_scratch matches copy evaluator") {
+  using namespace dst;
+
+  /*
+          0
+          |(5)
+          v
+          1+--(3)-->2+--(5)-->11
+          |
+          +(4)-->3+--(6)-->12
+
+    The base tree already paid 0->1.  The candidate rooted at 1 should only
+    charge terminal-side arcs, and the scratch evaluator should match the
+    copy-based evaluator exactly.
+  */
+  std::vector<std::pair<int,int>> edges {
+    {0,1}, {1,2}, {2,11}, {1,3}, {3,12}
+  };
+  std::vector<float> weights {5,3,5,4,6};
+  std::vector<int> terms {11,12};
+  DST dt = DST(edges, weights, 0, terms);
+
+  auto [dists_r, trace_r] = dijkstra(dt.graph.fwd_offset, dt.graph.fwd_target,
+                                     dt.graph.fwd_weight, dt.root);
+  auto trace_t = std::make_shared<std::unordered_map<int, std::shared_ptr<std::unordered_map<int,int>>>>();
+  auto dists_t = std::make_shared<std::unordered_map<int, std::shared_ptr<std::unordered_map<int,float>>>>();
+  for (auto t: dt.terms_dm) {
+    auto [dists_, trace_] = dijkstra(dt.graph.rev_offset, dt.graph.rev_target,
+                                     dt.graph.rev_weight, t);
+    (*dists_t)[t] = dists_;
+    (*trace_t)[t] = trace_;
+  }
+
+  auto base = std::make_shared<Tree> (dt.root);
+  base->add_arc(std::make_pair(dt.root, 1), dists_r->at(1), trace_r);
+
+  std::unordered_set<int> terms_left(dt.terms_dm.begin(), dt.terms_dm.end());
+  auto cand = dt.level2_through_v(dt.root, 1, dists_r->at(1), dists_t, terms_left);
+
+  double copy_delta = dt.partree_realized_delta(base, cand, trace_r, trace_t);
+  double scratch_delta = dt.partree_realized_delta_scratch(base, cand, trace_r, trace_t);
+  CHECK(eq(copy_delta, scratch_delta));
+  CHECK(eq(scratch_delta, 18));
+
+  double aborted = dt.partree_realized_delta_scratch(base, cand, trace_r, trace_t, 2);
+  CHECK(aborted >= 2);
+  CHECK(aborted <= scratch_delta);
+}
+
+
+TEST_CASE("adaptive level2 rerank_L one remains supported") {
+  using namespace dst;
+
+  std::vector<std::pair<int,int>> edges {
+    {0,1}, {0,2}, {0,3}, {0,4},
+    {1,11}, {2,12}, {3,13},
+    {4,11}, {4,12}, {4,13}
+  };
+  std::vector<float> weights {1,1,1,2.5, 2,2,2, 1,1,1};
+  std::vector<int> terms {11,12,13};
+  DST dt = DST(edges, weights, 0, terms);
+
+  auto adaptive2 = dt.adaptive_level2_alg(1);
+  auto adaptive_fast2 = dt.adaptive_fast_level2_alg(1);
+  auto full_adaptive2 = dt.full_adaptive_level2_alg(1);
+  auto full_adaptive_fast2 = dt.full_adaptive_fast_level2_alg(1);
+
+  CHECK(eq(adaptive2->to_tree()->cost, 5.5));
+  CHECK(eq(adaptive_fast2->to_tree()->cost, 5.5));
+  CHECK(eq(full_adaptive2->to_tree()->cost, 5.5));
+  CHECK(eq(full_adaptive_fast2->to_tree()->cost, 5.5));
+
+  CHECK(adaptive2->debuginfo.at("rerank_L") == "1");
+  CHECK(adaptive_fast2->debuginfo.at("rerank_L") == "1");
+  CHECK(full_adaptive2->debuginfo.at("rerank_L") == "1");
+  CHECK(full_adaptive_fast2->debuginfo.at("rerank_L") == "1");
+  CHECK(adaptive_fast2->debuginfo.at("rerank_mode") == "observed_prefix");
+  CHECK(full_adaptive_fast2->debuginfo.at("rerank_mode") == "observed_prefix");
+  CHECK(adaptive_fast2->debuginfo.at("certificate_L") == "1");
+  CHECK(full_adaptive_fast2->debuginfo.at("certificate_L") == "1");
+}
+
+
 TEST_CASE("level2_threshold returns q * next_weight - prefix_weight") {
   using namespace dst;
   CHECK(eq(level2_threshold(2, 5.0, 3.0), 7.0));
