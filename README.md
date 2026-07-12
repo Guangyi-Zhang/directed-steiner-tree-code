@@ -83,9 +83,20 @@ marginal density.  Fast adaptive 2-level methods certify only the top scored
 candidate, then rerank a bounded pool of concrete observed prefixes discovered
 during that certificate.  Scored pools are ordered by lower scored density,
 fewer terminals, then lower center id; realized reranking uses lower realized
-density with the same scored tie keys.  Pass `rerank_L = 1` to the C++ API to
-recover single-candidate scored selection.  Another terminal is added only when
-it strictly improves scored density.
+density with the same scored tie keys. Density ordering uses exact raw values;
+`EPSILON` comparisons are reserved for assertions and diagnostics. Pass
+`rerank_L = 1` to the C++ API to recover single-candidate scored selection.
+All adaptive 2-level C++ entry points reject `rerank_L < 1` with
+`std::invalid_argument`. Another terminal is added only when it strictly
+improves scored density.
+
+Fast adaptive 2-level results also report `observed_pool_consider_calls`,
+`observed_pool_key_changes`, `observed_pool_admissions`,
+`observed_pool_rejections`, `observed_pool_materializations`, and
+`observed_pool_invariant_violations`. These 64-bit counters distinguish cheap
+snapshot maintenance from final `PartialTree` materialization. Normally,
+materializations are at most `rerank_L` per greedy iteration and invariant
+violations are zero.
 
 
 ## Tests

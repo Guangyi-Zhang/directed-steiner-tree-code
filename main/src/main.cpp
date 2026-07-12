@@ -355,9 +355,24 @@ auto main(int argc, char** argv) -> int {
   if (has_key(*debuginfo, "rerank_L"))
     d.AddMember("rerank_L", rapidjson::Value(std::stoi(debuginfo->at("rerank_L"))), a);
   if (has_key(*debuginfo, "rerank_candidates_evaluated"))
-    d.AddMember("rerank_candidates_evaluated", rapidjson::Value(std::stoi(debuginfo->at("rerank_candidates_evaluated"))), a);
+    d.AddMember("rerank_candidates_evaluated", rapidjson::Value(static_cast<int64_t>(std::stoll(debuginfo->at("rerank_candidates_evaluated")))), a);
   if (has_key(*debuginfo, "rerank_realized_delta_calls"))
-    d.AddMember("rerank_realized_delta_calls", rapidjson::Value(std::stoi(debuginfo->at("rerank_realized_delta_calls"))), a);
+    d.AddMember("rerank_realized_delta_calls", rapidjson::Value(static_cast<int64_t>(std::stoll(debuginfo->at("rerank_realized_delta_calls")))), a);
+  for (const char *key : {
+      "observed_pool_consider_calls",
+      "observed_pool_key_changes",
+      "observed_pool_admissions",
+      "observed_pool_rejections",
+      "observed_pool_materializations",
+      "observed_pool_invariant_violations"
+  }) {
+    if (has_key(*debuginfo, key))
+      d.AddMember(
+          rapidjson::Value(rapidjson::StringRef(key)),
+          rapidjson::Value(static_cast<int64_t>(std::stoll(debuginfo->at(key)))),
+          a
+      );
+  }
   d.AddMember("mem", rapidjson::Value(rss), a); 
 
 #ifdef NO_FAST2_LB

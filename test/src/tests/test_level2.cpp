@@ -114,6 +114,183 @@ TEST_CASE("FenwickTree select by cumulative count") {
 }
 
 
+TEST_CASE("level2 scored keys form a strict total order") {
+  using namespace dst;
+
+  struct Key { double density; int nterm; int center; };
+  std::vector<Key> keys {
+    {1.0, 2, 3},
+    {1.0 + EPSILON * 0.6, 1, 2},
+    {1.0 + EPSILON * 1.2, 3, 1},
+    {1.0, 1, 4},
+    {1.0, 1, 2}
+  };
+  auto less = [] (const Key &a, const Key &b) {
+    return DST::level2_scored_key_less(
+        a.density, a.nterm, a.center,
+        b.density, b.nterm, b.center
+    );
+  };
+
+  for (const auto &a : keys) {
+    CHECK_FALSE(less(a, a));
+    for (const auto &b : keys) {
+      if (less(a, b))
+        CHECK_FALSE(less(b, a));
+      for (const auto &c : keys) {
+        if (less(a, b) and less(b, c))
+          CHECK(less(a, c));
+      }
+    }
+  }
+
+  std::sort(keys.begin(), keys.end(), less);
+  CHECK(keys[0].density == 1.0);
+  CHECK(keys[0].nterm == 1);
+  CHECK(keys[0].center == 2);
+  CHECK(keys[1].density == 1.0);
+  CHECK(keys[1].nterm == 1);
+  CHECK(keys[1].center == 4);
+  CHECK(keys[2].density == 1.0);
+  CHECK(keys[2].nterm == 2);
+  CHECK(keys[3].density == 1.0 + EPSILON * 0.6);
+  CHECK(keys[4].density == 1.0 + EPSILON * 1.2);
+}
+
+
+TEST_CASE("observed-prefix pool uses bounded ordered replacement") {
+  using namespace dst;
+
+  std::vector<DST::Level2ObservedPrefix> top;
+  top.reserve(2);
+  DST::Level2ObservedPoolStats stats;
+  auto prefix = [] (double density, int nterm, int center, bool ready = false) {
+    return DST::make_level2_observed_prefix(
+        density, density * nterm, nterm, center, ready
+    );
+  };
+
+  CHECK_FALSE(DST::consider_observed_prefix(top, prefix(0, 0, 9), 2, &stats));
+  CHECK(DST::consider_observed_prefix(top, prefix(4, 2, 4), 2, &stats));
+  CHECK(DST::consider_observed_prefix(top, prefix(3, 1, 3), 2, &stats));
+  CHECK_FALSE(DST::consider_observed_prefix(top, prefix(5, 1, 5), 2, &stats));
+  CHECK(top.size() == 2);
+  CHECK(top[0].center == 3);
+  CHECK(top[1].center == 4);
+
+  CHECK(DST::consider_observed_prefix(top, prefix(2, 3, 4), 2, &stats));
+  CHECK(top.size() == 2);
+  CHECK(top[0].center == 4);
+  CHECK(top[1].center == 3);
+
+  CHECK_FALSE(DST::consider_observed_prefix(top, prefix(2, 3, 4, true), 2, &stats));
+  CHECK(top[0].ready);
+  CHECK_FALSE(DST::consider_observed_prefix(top, prefix(2.5, 3, 4), 2, &stats));
+  CHECK(top[0].scored_density == 2);
+  CHECK(stats.invariant_violations == 1);
+
+  std::vector<DST::Level2ObservedPrefix> one;
+  CHECK(DST::consider_observed_prefix(one, prefix(3, 2, 2), 1));
+  CHECK(DST::consider_observed_prefix(one, prefix(2, 2, 1), 1));
+  CHECK(one.size() == 1);
+  CHECK(one.front().center == 1);
+}
+
+
+TEST_CASE("bounded observed-prefix pool matches a sorted reference stream") {
+  using namespace dst;
+
+  constexpr int rerank_L = 5;
+  std::vector<DST::Level2ObservedPrefix> bounded;
+  std::vector<DST::Level2ObservedPrefix> reference;
+  bounded.reserve(rerank_L);
+
+  for (int i = 0; i < 200; i++) {
+    int center = (i * 7) % 23;
+    int observation = i / 23;
+    double density = 20.0 + center * 0.1 - observation * 0.01;
+    int nterm = 1 + observation;
+    auto cand = DST::make_level2_observed_prefix(
+        density, density * nterm, nterm, center, (i % 3) == 0
+    );
+    DST::consider_observed_prefix(bounded, cand, rerank_L);
+
+    auto old = std::find_if(reference.begin(), reference.end(), [&] (const auto &item) {
+      return item.center == center;
+    });
+    if (old != reference.end()) {
+      if (DST::level2_observed_prefix_less(*old, cand)) {
+        old->ready = cand.ready;
+      } else {
+        reference.erase(old);
+        reference.push_back(cand);
+      }
+    } else {
+      reference.push_back(cand);
+    }
+    std::sort(
+        reference.begin(),
+        reference.end(),
+        DST::level2_observed_prefix_less
+    );
+    if (static_cast<int>(reference.size()) > rerank_L)
+      reference.resize(rerank_L);
+
+    REQUIRE(bounded.size() == reference.size());
+    for (size_t j = 0; j < bounded.size(); j++) {
+      CHECK(bounded[j].center == reference[j].center);
+      CHECK(bounded[j].nterm == reference[j].nterm);
+      CHECK(bounded[j].scored_density == reference[j].scored_density);
+      CHECK(bounded[j].scored_cost == reference[j].scored_cost);
+    }
+  }
+}
+
+
+TEST_CASE("level2 center indexes reconstruct observed prefixes") {
+  using namespace dst;
+
+  Level2CenterIndex idx(0, 7, 10.0);
+  CHECK(idx.add_term(101, 1));
+  double snapshot_cost = idx.tree.cost_sc;
+  CHECK(idx.add_term(102, 2));
+  auto stale = idx.partree_prefix(1, false);
+  CHECK(stale->v == 7);
+  CHECK(stale->terms == std::unordered_set<int> {101});
+  CHECK(eq(stale->cost_sc, snapshot_cost));
+
+  AdaptiveLevel2CenterIndex adaptive {8, 5};
+  adaptive.insert(201, 1);
+  adaptive.insert(202, 1);
+  adaptive.insert(203, 2);
+  adaptive.discovered_bound(10);
+  adaptive.erase({201});
+  auto ranked = adaptive.partree(0, 10, 2);
+  CHECK(ranked->terms == std::unordered_set<int> {202, 203});
+  CHECK(ranked->terms_before_ready.front() == 202);
+  CHECK(ranked->terms_before_ready.back() == 203);
+}
+
+
+TEST_CASE("level2 center indexes report selected-prefix changes") {
+  using namespace dst;
+
+  Level2CenterIndex idx(0, 1, 1.0);
+  CHECK(idx.add_term(11, 1));
+  CHECK(idx.add_term(12, 3)); // readiness changes even though the prefix does not
+  CHECK_FALSE(idx.add_term(13, 5));
+  CHECK_FALSE(idx.add_term(12, 3));
+
+  AdaptiveLevel2CenterIndex adaptive {5, 4};
+  adaptive.insert(21, 1);
+  adaptive.insert(22, 3);
+  adaptive.discovered_bound(10);
+  CHECK(adaptive.insert(23, 5));
+  CHECK_FALSE(adaptive.insert(24, 20));
+  CHECK_FALSE(adaptive.insert(24, 20));
+}
+
+
 TEST_CASE("AdaptiveLevel2CenterIndex builds threshold prefix and erases") {
   using namespace dst;
 
@@ -614,6 +791,45 @@ TEST_CASE("adaptive level2 rerank_L one remains supported") {
   CHECK(full_adaptive_fast2->debuginfo.at("rerank_mode") == "observed_prefix");
   CHECK(adaptive_fast2->debuginfo.at("certificate_L") == "1");
   CHECK(full_adaptive_fast2->debuginfo.at("certificate_L") == "1");
+}
+
+
+TEST_CASE("adaptive level2 APIs reject nonpositive rerank_L") {
+  using namespace dst;
+
+  std::vector<std::pair<int,int>> edges {{0, 1}, {1, 2}};
+  std::vector<float> weights {1, 1};
+  DST dt(edges, weights, 0, {2});
+
+  CHECK_THROWS_AS(dt.adaptive_level2_alg(0), std::invalid_argument);
+  CHECK_THROWS_AS(dt.adaptive_fast_level2_alg(-1), std::invalid_argument);
+  CHECK_THROWS_AS(dt.full_adaptive_level2_alg(0), std::invalid_argument);
+  CHECK_THROWS_AS(dt.full_adaptive_fast_level2_alg(-1), std::invalid_argument);
+}
+
+
+TEST_CASE("fast adaptive observed pool materializes only the final shortlist") {
+  using namespace dst;
+
+  std::vector<std::pair<int,int>> edges {
+    {0,1}, {0,2}, {0,3}, {0,4},
+    {1,11}, {2,12}, {3,13},
+    {4,11}, {4,12}, {4,13}
+  };
+  std::vector<float> weights {1,1,1,2.5, 2,2,2, 1,1,1};
+  DST dt(edges, weights, 0, {11,12,13});
+
+  auto adaptive = dt.adaptive_fast_level2_alg(2);
+  auto full = dt.full_adaptive_fast_level2_alg(2);
+  for (const auto &result : {adaptive, full}) {
+    auto considered = std::stoll(result->debuginfo.at("observed_pool_consider_calls"));
+    auto materialized = std::stoll(result->debuginfo.at("observed_pool_materializations"));
+    auto evaluated = std::stoll(result->debuginfo.at("rerank_candidates_evaluated"));
+    CHECK(considered >= materialized);
+    CHECK(materialized == evaluated);
+    CHECK(materialized <= 2 * static_cast<long long>(result->subtrees.size()));
+    CHECK(result->debuginfo.at("observed_pool_invariant_violations") == "0");
+  }
 }
 
 

@@ -344,10 +344,36 @@ namespace dst {
         tree {r, v, d_rv},
         dead_terms {shared_dead_terms} {};
 
-    void add_term(int t, double d_vt) {
+    bool add_term(int t, double d_vt) {
       if (dead_terms != nullptr and has_key(*dead_terms, t))
-        return;
+        return false;
+      auto old_nterm = tree.terms.size();
+      double old_cost = tree.cost_sc;
+      bool old_ready = tree.ready;
       tree.add_term(t, d_vt);
+      return tree.terms.size() != old_nterm or tree.cost_sc != old_cost or
+             tree.ready != old_ready;
+    }
+
+    std::shared_ptr<PartialTree> partree_prefix(
+        int snapshot_nterm,
+        bool snapshot_ready
+    ) const {
+      assert(snapshot_nterm >= 0);
+      auto par = std::make_shared<PartialTree>(tree.root, tree.v, tree.d_rv);
+      int copied = 0;
+      for (auto t : tree.terms_before_ready) {
+        if (copied == snapshot_nterm)
+          break;
+        par->terms.insert(t);
+        par->distances_t[t] = tree.distances_t.at(t);
+        par->cost_sc += tree.distances_t.at(t);
+        par->terms_before_ready.push_back(t);
+        copied++;
+      }
+      assert(copied == snapshot_nterm);
+      par->ready = snapshot_ready;
+      return par;
     }
 
     void erase_and_reset(const std::unordered_set<int> &terms_del) {
@@ -451,9 +477,12 @@ namespace dst {
         v {v}, alive_counts {max_terms}, alive_weights {max_terms} {};
 
     // Append a newly discovered terminal at the next rank (nondecreasing d(v,t)).
-    void insert(int t, double d_vt) {
+    bool insert(int t, double d_vt) {
       if (has_key(rank_of_term, t))
-        return;
+        return false;
+
+      int old_cached_nterm = cached_nterm;
+      double old_cached_prefix_weight = cached_prefix_weight;
 
       int rank = term_order.size();
       assert(rank < alive_counts.size());
@@ -477,6 +506,9 @@ namespace dst {
           cached_density = (cached_d_rv + cached_prefix_weight) / cached_nterm;
         }
       }
+      return cache_valid and
+             (cached_nterm != old_cached_nterm or
+              cached_prefix_weight != old_cached_prefix_weight);
     }
 
     // Mark covered terminals dead in both Fenwick trees (values stay at rank).
@@ -641,21 +673,28 @@ namespace dst {
       return eq(discovered.density, optimistic.density);
     }
 
-    // Build PartialTree(root, v, d_rv) with the best discovered alive prefix.
-    auto partree(int root, double d_rv) {
-      if (!cache_valid || !eq(cached_d_rv, d_rv))
-        refresh_cache(d_rv);
-
+    // Build PartialTree(root, v, d_rv) with an explicit alive-prefix length.
+    auto partree(int root, double d_rv, int snapshot_nterm) const {
+      assert(snapshot_nterm >= 0 and snapshot_nterm <= m_alive);
       auto par = std::make_shared<PartialTree> (root, v, d_rv);
-      for (int i = 1; i <= cached_nterm; i++) {
+      for (int i = 1; i <= snapshot_nterm; i++) {
         int rank = alive_counts.select_by_cumulative(i);
+        assert(rank != NONVERTEX);
         int t = term_order[rank];
         double d_vt = distances[rank];
         par->terms.insert(t);
         par->distances_t[t] = d_vt;
+        par->terms_before_ready.push_back(t);
         par->cost_sc += d_vt;
       }
       return par;
+    }
+
+    // Build PartialTree(root, v, d_rv) with the best discovered alive prefix.
+    auto partree(int root, double d_rv) {
+      if (!cache_valid || !eq(cached_d_rv, d_rv))
+        refresh_cache(d_rv);
+      return partree(root, d_rv, cached_nterm);
     }
   };
 

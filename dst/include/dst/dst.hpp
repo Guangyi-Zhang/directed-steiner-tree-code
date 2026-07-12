@@ -9,6 +9,7 @@
 #include <iterator> // std::advance
 #include <numeric>  // std::partial_sum
 #include <string>
+#include <stdexcept>
 #include <vector>
 #include <queue>
 #include <functional>
@@ -480,6 +481,23 @@ namespace dst {
       bool ready = false;
     };
 
+    struct Level2ObservedPrefix {
+      double scored_density = std::numeric_limits<double>::max();
+      double scored_cost = std::numeric_limits<double>::max();
+      int nterm = 0;
+      int center = NONVERTEX;
+      bool ready = false;
+    };
+
+    struct Level2ObservedPoolStats {
+      long long consider_calls = 0;
+      long long key_changes = 0;
+      long long admissions = 0;
+      long long rejections = 0;
+      long long materializations = 0;
+      long long invariant_violations = 0;
+    };
+
     static bool level2_scored_key_less(
         double a_density,
         int a_nterm,
@@ -488,14 +506,12 @@ namespace dst {
         int b_nterm,
         int b_center
     ) {
-      if (a_nterm == 0)
+      if (a_nterm <= 0)
         return false;
-      if (b_nterm == 0)
+      if (b_nterm <= 0)
         return true;
-      if (a_density < b_density)
-        return true;
-      if (!eq(a_density, b_density))
-        return false;
+      if (a_density != b_density)
+        return a_density < b_density;
       if (a_nterm != b_nterm)
         return a_nterm < b_nterm;
       return a_center < b_center;
@@ -515,6 +531,81 @@ namespace dst {
       );
     }
 
+    static bool level2_observed_prefix_less(
+        const Level2ObservedPrefix &a,
+        const Level2ObservedPrefix &b
+    ) {
+      return level2_scored_key_less(
+          a.scored_density,
+          a.nterm,
+          a.center,
+          b.scored_density,
+          b.nterm,
+          b.center
+      );
+    }
+
+    template <class Candidate, class Less>
+    static bool consider_top_l_value(
+        std::vector<Candidate> &top,
+        Candidate cand,
+        int rerank_L,
+        bool replace_same_center,
+        Less less,
+        Level2ObservedPoolStats *stats = nullptr
+    ) {
+      if (rerank_L < 1)
+        throw std::invalid_argument("rerank_L must be >= 1");
+      if (stats != nullptr)
+        stats->consider_calls++;
+      if (cand.nterm <= 0) {
+        if (stats != nullptr)
+          stats->rejections++;
+        return false;
+      }
+
+      auto old = top.end();
+      if (replace_same_center) {
+        old = std::find_if(top.begin(), top.end(), [&] (const Candidate &item) {
+          return item.center == cand.center;
+        });
+      }
+      if (old != top.end()) {
+        bool same_key = !less(*old, cand) and !less(cand, *old);
+        if (same_key) {
+          old->scored_cost = cand.scored_cost;
+          old->ready = cand.ready;
+          if (stats != nullptr)
+            stats->rejections++;
+          return false;
+        }
+        if (less(*old, cand)) {
+          old->ready = cand.ready;
+          if (stats != nullptr) {
+            stats->rejections++;
+            stats->invariant_violations++;
+          }
+          return false;
+        }
+        top.erase(old);
+        if (stats != nullptr)
+          stats->key_changes++;
+      }
+
+      if (static_cast<int>(top.size()) >= rerank_L and !less(cand, top.back())) {
+        if (stats != nullptr)
+          stats->rejections++;
+        return false;
+      }
+      auto pos = std::lower_bound(top.begin(), top.end(), cand, less);
+      top.insert(pos, std::move(cand));
+      if (static_cast<int>(top.size()) > rerank_L)
+        top.pop_back();
+      if (stats != nullptr)
+        stats->admissions++;
+      return true;
+    }
+
     static void consider_top_l_candidate(
         std::vector<Level2RerankCandidate> &top,
         Level2RerankCandidate cand,
@@ -523,24 +614,41 @@ namespace dst {
     ) {
       if (cand.tree == nullptr or cand.nterm == 0)
         return;
+      consider_top_l_value(
+          top,
+          std::move(cand),
+          rerank_L,
+          replace_same_center,
+          level2_scored_candidate_less
+      );
+    }
 
-      if (replace_same_center) {
-        top.erase(
-            std::remove_if(
-                top.begin(),
-                top.end(),
-                [&] (const Level2RerankCandidate &old) {
-                  return old.center == cand.center;
-                }
-            ),
-            top.end()
-        );
-      }
+    static bool consider_observed_prefix(
+        std::vector<Level2ObservedPrefix> &top,
+        Level2ObservedPrefix prefix,
+        int rerank_L,
+        Level2ObservedPoolStats *stats = nullptr
+    ) {
+      return consider_top_l_value(
+          top,
+          std::move(prefix),
+          rerank_L,
+          true,
+          level2_observed_prefix_less,
+          stats
+      );
+    }
 
-      top.push_back(std::move(cand));
-      std::sort(top.begin(), top.end(), level2_scored_candidate_less);
-      if (static_cast<int>(top.size()) > rerank_L)
-        top.resize(rerank_L);
+    static void update_observed_prefix_ready(
+        std::vector<Level2ObservedPrefix> &top,
+        int center,
+        bool ready
+    ) {
+      auto old = std::find_if(top.begin(), top.end(), [&] (const auto &prefix) {
+        return prefix.center == center;
+      });
+      if (old != top.end())
+        old->ready = ready;
     }
 
     static bool level2_bound_can_enter_top_l(
@@ -601,6 +709,64 @@ namespace dst {
     ) const {
       auto cand = make_level2_rerank_candidate(tree);
       cand.ready = ready;
+      return cand;
+    }
+
+    static Level2ObservedPrefix make_level2_observed_prefix(
+        double scored_density,
+        double scored_cost,
+        int nterm,
+        int center,
+        bool ready
+    ) {
+      Level2ObservedPrefix prefix;
+      prefix.scored_density = scored_density;
+      prefix.scored_cost = scored_cost;
+      prefix.nterm = nterm;
+      prefix.center = center;
+      prefix.ready = ready;
+      return prefix;
+    }
+
+    static void validate_rerank_l(int rerank_L) {
+      if (rerank_L < 1)
+        throw std::invalid_argument("rerank_L must be >= 1");
+    }
+
+    static void add_observed_pool_debug_info(
+        const std::shared_ptr<PartialTreeManager> &par,
+        const Level2ObservedPoolStats &stats
+    ) {
+      par->debuginfo["observed_pool_consider_calls"] = std::to_string(stats.consider_calls);
+      par->debuginfo["observed_pool_key_changes"] = std::to_string(stats.key_changes);
+      par->debuginfo["observed_pool_admissions"] = std::to_string(stats.admissions);
+      par->debuginfo["observed_pool_rejections"] = std::to_string(stats.rejections);
+      par->debuginfo["observed_pool_materializations"] = std::to_string(stats.materializations);
+      par->debuginfo["observed_pool_invariant_violations"] = std::to_string(stats.invariant_violations);
+    }
+
+    static Level2RerankCandidate materialized_level2_candidate(
+        const Level2ObservedPrefix &prefix,
+        std::shared_ptr<PartialTree> tree,
+        Level2ObservedPoolStats *stats = nullptr
+    ) {
+      tree->ready = prefix.ready;
+      #ifndef NDEBUG
+      assert(tree->v == prefix.center);
+      assert(static_cast<int>(tree->terms.size()) == prefix.nterm);
+      assert(eq(tree->cost_sc, prefix.scored_cost));
+      assert(eq(tree->density(), prefix.scored_density));
+      #endif
+      if (stats != nullptr)
+        stats->materializations++;
+
+      Level2RerankCandidate cand;
+      cand.tree = std::move(tree);
+      cand.scored_density = prefix.scored_density;
+      cand.scored_cost = prefix.scored_cost;
+      cand.nterm = prefix.nterm;
+      cand.center = prefix.center;
+      cand.ready = prefix.ready;
       return cand;
     }
 
@@ -762,6 +928,7 @@ namespace dst {
 
 
     auto adaptive_level2_alg(int rerank_L = 5) {
+      validate_rerank_l(rerank_L);
       // Terminal-side distances are fixed in the root-adaptive variant.
       auto trace_t = std::make_shared<std::unordered_map<int, std::shared_ptr<std::unordered_map<int,int>>>>();
       auto dists_t = std::make_shared<std::unordered_map<int, std::shared_ptr<std::unordered_map<int,float>>>>();
@@ -790,6 +957,7 @@ namespace dst {
         par->trace_r = trace_r;
 
         std::vector<Level2RerankCandidate> top;
+        top.reserve(rerank_L);
         for (int v = 0; v < n_original; v++) {
           if (not has_key(*dists_r, v))
             continue;
@@ -822,6 +990,7 @@ namespace dst {
 
 
     auto full_adaptive_level2_alg(int rerank_L = 5) {
+      validate_rerank_l(rerank_L);
       // Root-adaptive variant (adaptive_level2) fixes terminal-side distances;
       // here both sides are recomputed each iteration on residual weights.
       auto par = std::make_shared<PartialTreeManager> (root);
@@ -854,6 +1023,7 @@ namespace dst {
 
         // Greedy 2-level bunch: pick v minimizing density among uncovered terms.
         std::vector<Level2RerankCandidate> top;
+        top.reserve(rerank_L);
         for (int v = 0; v < n_original; v++) {
           if (not has_key(*dists_r, v))
             continue;
@@ -894,8 +1064,14 @@ namespace dst {
         std::shared_ptr<std::unordered_map<int,int>> trace_r_for_realized = nullptr,
         int rerank_L = 5,
         long long *rerank_candidates_evaluated = nullptr,
-        long long *rerank_realized_delta_calls = nullptr
+        long long *rerank_realized_delta_calls = nullptr,
+        Level2ObservedPoolStats *observed_pool_stats = nullptr
     ) {
+      validate_rerank_l(rerank_L);
+      Level2ObservedPoolStats local_observed_pool_stats;
+      auto *pool_stats = observed_pool_stats == nullptr
+          ? &local_observed_pool_stats
+          : observed_pool_stats;
       // init a Level2CenterIndex for each v reachable from root
       std::unordered_map<int, Level2CenterIndex> center_idxs;
       std::list<int> LBs;
@@ -914,7 +1090,8 @@ namespace dst {
 
       CoordinatedDijkstra cosssp {graph.rev_offset, graph.rev_target,
                                    rev_weight_to_use, terms_left};
-      std::vector<Level2RerankCandidate> observed_top_l;
+      std::vector<Level2ObservedPrefix> observed_top_l;
+      observed_top_l.reserve(rerank_L);
       int best_v = NONVERTEX;
       double best_scored_density = std::numeric_limits<double>::max();
       int best_nterm = 0;
@@ -955,11 +1132,17 @@ namespace dst {
             terminal_lb,
             terminal_search_exhausted
         );
-        consider_top_l_candidate(
+        consider_observed_prefix(
             observed_top_l,
-            make_level2_rerank_candidate(idx.tree, ready),
+            make_level2_observed_prefix(
+                density,
+                idx.tree.cost_sc,
+                nterm,
+                v,
+                ready
+            ),
             rerank_L,
-            true
+            pool_stats
         );
       };
 
@@ -1005,17 +1188,37 @@ namespace dst {
               terminal_lb,
               terminal_search_exhausted
           );
-          consider_top_l_candidate(
+          consider_observed_prefix(
               observed_top_l,
-              make_level2_rerank_candidate(idx_best.tree, ready),
+              make_level2_observed_prefix(
+                  idx_best.density(),
+                  idx_best.tree.cost_sc,
+                  static_cast<int>(idx_best.tree.terms.size()),
+                  best_v,
+                  ready
+              ),
               rerank_L,
-              true
+              pool_stats
           );
+        }
+
+        std::vector<Level2RerankCandidate> materialized;
+        materialized.reserve(observed_top_l.size());
+        for (const auto &prefix : observed_top_l) {
+          auto tree = center_idxs.at(prefix.center).partree_prefix(
+              prefix.nterm,
+              prefix.ready
+          );
+          materialized.push_back(materialized_level2_candidate(
+              prefix,
+              std::move(tree),
+              pool_stats
+          ));
         }
 
         return rerank_top_l_by_realized(
             base_tree,
-            observed_top_l,
+            materialized,
             trace_r_for_realized,
             cosssp.trace_t,
             rerank_candidates_evaluated,
@@ -1050,8 +1253,8 @@ namespace dst {
           continue;
 
         auto &idx_v = center_idxs.at(v);
-        idx_v.add_term(t, d_vt);
-        observe_center(v);
+        if (idx_v.add_term(t, d_vt))
+          observe_center(v);
       }
     }
 
@@ -1060,6 +1263,7 @@ namespace dst {
     // distances. One persistent backward CoordinatedDijkstra; per-center Fenwick
     // indexes maintain best terminal prefixes as discoveries arrive.
     auto adaptive_fast_level2_alg(int rerank_L = 5) {
+      validate_rerank_l(rerank_L);
       auto par = std::make_shared<PartialTreeManager> (root);
       par->trace_t = nullptr;
       std::unordered_set<int> terms_left(terms_dm.begin(), terms_dm.end());
@@ -1070,6 +1274,7 @@ namespace dst {
         par->debuginfo["rerank_L"] = std::to_string(rerank_L);
         par->debuginfo["rerank_candidates_evaluated"] = "0";
         par->debuginfo["rerank_realized_delta_calls"] = "0";
+        add_observed_pool_debug_info(par, Level2ObservedPoolStats {});
         return par;
       }
 
@@ -1086,6 +1291,7 @@ namespace dst {
       bool terminal_search_exhausted = false;
       long long rerank_candidates_evaluated = 0;
       long long rerank_realized_delta_calls = 0;
+      Level2ObservedPoolStats observed_pool_stats;
 
       // Get or create the center index for vertex v, lazily populated from cosssp distances
       auto ensure_center = [&] (int v) -> AdaptiveLevel2CenterIndex& {
@@ -1126,7 +1332,8 @@ namespace dst {
         // Survivor list of still-possible centers for this greedy iteration.
         std::list<int> survivors;
         std::unordered_set<int> survivors_set;
-        std::vector<Level2RerankCandidate> observed_top_l;
+        std::vector<Level2ObservedPrefix> observed_top_l;
+        observed_top_l.reserve(rerank_L);
         int best_v = NONVERTEX;
         double best_scored_density = std::numeric_limits<double>::max();
         int best_nterm = 0;
@@ -1155,12 +1362,17 @@ namespace dst {
               terminal_lb,
               terminal_search_exhausted
           );
-          auto tree_v = idx.partree(root, dists_r->at(v));
-          consider_top_l_candidate(
+          consider_observed_prefix(
               observed_top_l,
-              make_level2_rerank_candidate(tree_v, ready),
+              make_level2_observed_prefix(
+                  bound.density,
+                  dists_r->at(v) + idx.cached_prefix_weight,
+                  bound.nterm,
+                  v,
+                  ready
+              ),
               rerank_L,
-              true
+              &observed_pool_stats
           );
         };
 
@@ -1225,9 +1437,20 @@ namespace dst {
           terminal_lb = d_vt;
           if (v < n_original and has_key(*dists_r, v)) {
             auto &idx = ensure_center(v);
-            idx.insert(t, d_vt);
-            if (has_key(survivors_set, v))
-              observe_center(v);
+            bool prefix_changed = idx.insert(t, d_vt);
+            if (has_key(survivors_set, v)) {
+              if (prefix_changed) {
+                observe_center(v);
+              } else {
+                bool ready = idx.discovered_prefix_is_exact(
+                    dists_r->at(v),
+                    static_cast<int>(terms_left.size()),
+                    terminal_lb,
+                    terminal_search_exhausted
+                );
+                update_observed_prefix_ready(observed_top_l, v, ready);
+              }
+            }
           }
         }
 
@@ -1239,18 +1462,39 @@ namespace dst {
               terminal_lb,
               terminal_search_exhausted
           );
-          auto best_scored = idx_best.partree(root, dists_r->at(best_v));
-          consider_top_l_candidate(
+          auto best_bound = idx_best.discovered_bound(dists_r->at(best_v));
+          consider_observed_prefix(
               observed_top_l,
-              make_level2_rerank_candidate(best_scored, ready),
+              make_level2_observed_prefix(
+                  best_bound.density,
+                  dists_r->at(best_v) + idx_best.cached_prefix_weight,
+                  best_bound.nterm,
+                  best_v,
+                  ready
+              ),
               rerank_L,
-              true
+              &observed_pool_stats
           );
+        }
+
+        std::vector<Level2RerankCandidate> materialized;
+        materialized.reserve(observed_top_l.size());
+        for (const auto &prefix : observed_top_l) {
+          auto tree = center_idxs.at(prefix.center).partree(
+              root,
+              dists_r->at(prefix.center),
+              prefix.nterm
+          );
+          materialized.push_back(materialized_level2_candidate(
+              prefix,
+              std::move(tree),
+              &observed_pool_stats
+          ));
         }
 
         auto best = rerank_top_l_by_realized(
             par->totree,
-            observed_top_l,
+            materialized,
             trace_r,
             cosssp.trace_t,
             &rerank_candidates_evaluated,
@@ -1279,16 +1523,19 @@ namespace dst {
       par->debuginfo["rerank_L"] = std::to_string(rerank_L);
       par->debuginfo["rerank_candidates_evaluated"] = std::to_string(rerank_candidates_evaluated);
       par->debuginfo["rerank_realized_delta_calls"] = std::to_string(rerank_realized_delta_calls);
+      add_observed_pool_debug_info(par, observed_pool_stats);
       return par;
     }
 
 
     auto full_adaptive_fast_level2_alg(int rerank_L = 5) {
+      validate_rerank_l(rerank_L);
       auto par = std::make_shared<PartialTreeManager> (root);
       std::unordered_set<int> terms_left(terms_dm.begin(), terms_dm.end());
       int sssp_nodes_visited = 0;
       long long rerank_candidates_evaluated = 0;
       long long rerank_realized_delta_calls = 0;
+      Level2ObservedPoolStats observed_pool_stats;
 
       while (terms_left.size() > 0) {
         auto [fwd_res, rev_res] = residual_weights(par->totree);
@@ -1304,7 +1551,8 @@ namespace dst {
             trace_r,
             rerank_L,
             &rerank_candidates_evaluated,
-            &rerank_realized_delta_calls
+            &rerank_realized_delta_calls,
+            &observed_pool_stats
         );
         sssp_nodes_visited += sssp_t;
         par->trace_r = trace_r;
@@ -1324,6 +1572,7 @@ namespace dst {
       par->debuginfo["rerank_L"] = std::to_string(rerank_L);
       par->debuginfo["rerank_candidates_evaluated"] = std::to_string(rerank_candidates_evaluated);
       par->debuginfo["rerank_realized_delta_calls"] = std::to_string(rerank_realized_delta_calls);
+      add_observed_pool_debug_info(par, observed_pool_stats);
       return par;
     }
 
