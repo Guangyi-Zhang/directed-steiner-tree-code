@@ -344,6 +344,8 @@ namespace dst {
         tree {r, v, d_rv},
         dead_terms {shared_dead_terms} {};
 
+    // Add a terminal to the partial tree. Returns true if the observable
+    // prefix (nterm, cost, or readiness) actually changed.
     bool add_term(int t, double d_vt) {
       if (dead_terms != nullptr and has_key(*dead_terms, t))
         return false;
@@ -355,6 +357,10 @@ namespace dst {
              tree.ready != old_ready;
     }
 
+    // Reconstruct a partial-tree snapshot of exactly snapshot_nterm terms
+    // (in insertion order) with the given ready flag.  Unlike partree()
+    // which materialises the best alive prefix, this is used to recreate
+    // a previously observed prefix from the cheap observed-pool shortlist.
     std::shared_ptr<PartialTree> partree_prefix(
         int snapshot_nterm,
         bool snapshot_ready
@@ -476,11 +482,13 @@ namespace dst {
     AdaptiveLevel2CenterIndex(int v, int max_terms) :
         v {v}, alive_counts {max_terms}, alive_weights {max_terms} {};
 
-    // Append a newly discovered terminal at the next rank (nondecreasing d(v,t)).
+    // Record a newly discovered terminal t at distance d_vt (nondecreasing
+    // insertion order).  Returns true if the best known prefix (cached_nterm
+    // or cached_prefix_weight) changed as a result, so callers can decide
+    // whether re-observation of this center is needed.
     bool insert(int t, double d_vt) {
       if (has_key(rank_of_term, t))
         return false;
-
       int old_cached_nterm = cached_nterm;
       double old_cached_prefix_weight = cached_prefix_weight;
 
@@ -497,7 +505,8 @@ namespace dst {
       w_alive += d_vt;
 
       // If the cached prefix already included all old_m discovered terminals, try
-      // extending it by one without a full binary search.
+      // extending it by one with a cheap threshold check instead of a full binary
+      // search over the Fenwick tree.
       if (cache_valid and cached_nterm == old_m) {
         double thr = level2_threshold(old_m, d_vt, cached_prefix_weight);
         if (lq(thr, cached_d_rv)) {

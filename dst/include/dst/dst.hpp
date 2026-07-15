@@ -472,6 +472,9 @@ namespace dst {
     }
 
 
+    // Full rerank candidate with a materialised PartialTree.
+    // Used as the concrete Candidate type in consider_top_l_value
+    // after the observed-pool shortlist has been materialised.
     struct Level2RerankCandidate {
       std::shared_ptr<PartialTree> tree = nullptr;
       double scored_density = std::numeric_limits<double>::max();
@@ -481,6 +484,11 @@ namespace dst {
       bool ready = false;
     };
 
+    // Lightweight stand-in for Level2RerankCandidate that omits
+    // the shared_ptr<PartialTree> tree.  Used as Candidate in
+    // consider_top_l_value during the cheap observation phase;
+    // materialised into Level2RerankCandidate only after the pool
+    // is finalised.
     struct Level2ObservedPrefix {
       double scored_density = std::numeric_limits<double>::max();
       double scored_cost = std::numeric_limits<double>::max();
@@ -489,6 +497,7 @@ namespace dst {
       bool ready = false;
     };
 
+    // counters tracking pool behavior
     struct Level2ObservedPoolStats {
       long long consider_calls = 0;
       long long key_changes = 0;
@@ -545,6 +554,17 @@ namespace dst {
       );
     }
 
+    // Generic bounded ordered-insertion into a top-L pool.
+    // If replace_same_center is true, an existing entry with the same center
+    // is either replaced (if the new candidate is strictly better), updated
+    // in place (if the key is identical), or rejected (if the existing entry
+    // is better — an "invariant violation" that still absorbs the new ready
+    // flag).  Returns true iff the candidate was admitted into the pool.
+    //
+    // @tparam Candidate — type with fields scored_density, scored_cost, nterm,
+    //                     center, ready (e.g. Level2ObservedPrefix or
+    //                     Level2RerankCandidate).
+    // @tparam Less       — strict weak ordering over Candidate.
     template <class Candidate, class Less>
     static bool consider_top_l_value(
         std::vector<Candidate> &top,
@@ -564,6 +584,7 @@ namespace dst {
         return false;
       }
 
+      // Check for an existing entry with the same center.
       auto old = top.end();
       if (replace_same_center) {
         old = std::find_if(top.begin(), top.end(), [&] (const Candidate &item) {
@@ -573,6 +594,7 @@ namespace dst {
       if (old != top.end()) {
         bool same_key = !less(*old, cand) and !less(cand, *old);
         if (same_key) {
+          // Same key — update mutable fields and reject as a new entry.
           old->scored_cost = cand.scored_cost;
           old->ready = cand.ready;
           if (stats != nullptr)
@@ -580,6 +602,8 @@ namespace dst {
           return false;
         }
         if (less(*old, cand)) {
+          // Existing entry is better — this shouldn't happen under normal
+          // monotonically-improving observation, but absorb the ready flag.
           old->ready = cand.ready;
           if (stats != nullptr) {
             stats->rejections++;
@@ -587,16 +611,19 @@ namespace dst {
           }
           return false;
         }
+        // New candidate is strictly better — evict the old entry.
         top.erase(old);
         if (stats != nullptr)
           stats->key_changes++;
       }
 
+      // Reject if the pool is full and cand is worse than the worst.
       if (static_cast<int>(top.size()) >= rerank_L and !less(cand, top.back())) {
         if (stats != nullptr)
           stats->rejections++;
         return false;
       }
+      // Ordered insertion into the bounded sorted vector.
       auto pos = std::lower_bound(top.begin(), top.end(), cand, less);
       top.insert(pos, std::move(cand));
       if (static_cast<int>(top.size()) > rerank_L)
@@ -606,6 +633,11 @@ namespace dst {
       return true;
     }
 
+    // consider_top_l_candidate operates on full Level2RerankCandidate
+    // objects (with materialised tree).  It is a thin wrapper that returns
+    // void, checks for null tree, and exposes replace_same_center as a
+    // parameter with default false.  Used by the older (non-fast) level-2
+    // algorithms that still materialise eagerly.
     static void consider_top_l_candidate(
         std::vector<Level2RerankCandidate> &top,
         Level2RerankCandidate cand,
@@ -623,6 +655,11 @@ namespace dst {
       );
     }
 
+    // consider_observed_prefix operates on lightweight Level2ObservedPrefix
+    // objects (no tree pointer).  It returns bool, always replaces the same
+    // center, and collects pool statistics.  Used by the fast level-2
+    // algorithms during the cheap observation phase — materialisation is
+    // deferred until after the shortlist is finalised.
     static bool consider_observed_prefix(
         std::vector<Level2ObservedPrefix> &top,
         Level2ObservedPrefix prefix,
