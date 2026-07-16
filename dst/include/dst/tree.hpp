@@ -150,6 +150,35 @@ namespace dst {
       _print_treenode(root, NONVERTEX, v2nd, "", true);
     }
 
+    // Verify that each required terminal is covered by a root-directed path.
+    bool is_valid(const std::unordered_set<int> &required_terms) const {
+      if (Tree::csr_graph == nullptr ||
+          root < 0 || root >= Tree::csr_graph->n ||
+          !has_key(trace, root) || trace.at(root) != NONVERTEX)
+        return false;
+
+      for (const auto terminal : required_terms) {
+        if (!has_key(terms_cov, terminal) || !has_key(trace, terminal))
+          return false;
+
+        std::unordered_set<int> path_vertices;
+        int v = terminal;
+        while (v != root) {
+          if (!path_vertices.insert(v).second || !has_key(trace, v))
+            return false;  // Cycle or a path that stops before the root.
+
+          const int parent = trace.at(v);
+          if (parent < 0 || parent >= Tree::csr_graph->n ||
+              v < 0 || v >= Tree::csr_graph->n ||
+              Tree::csr_graph->edge_weight(parent, v) == std::numeric_limits<float>::max())
+            return false;
+          v = parent;
+        }
+      }
+
+      return true;
+    }
+
     void _print_treenode(
         int v, 
         int pa, 

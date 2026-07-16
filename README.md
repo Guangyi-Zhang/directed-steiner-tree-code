@@ -98,6 +98,10 @@ snapshot maintenance from final `PartialTree` materialization. Normally,
 materializations are at most `rerank_L` per greedy iteration and invariant
 violations are zero.
 
+The example and experiment binaries validate every returned solution tree after
+the algorithm completes. This feasibility check verifies a root-directed path
+to every internally represented terminal and is excluded from recorded runtime.
+
 
 ## Tests
 

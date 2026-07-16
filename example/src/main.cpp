@@ -61,6 +61,11 @@ int main(int argc, char** argv) {
   double time_elapsed_ms = 1000.0 * (c_end-c_start) / CLOCKS_PER_SEC;
 
   std::shared_ptr<Tree> tree = partree->to_tree();
+  if (!tree->is_valid(dt.terms_dm)) {
+    std::cerr << method << " returned an invalid solution tree" << std::endl;
+    return 1;
+  }
+
   std::cout << "cost " << tree->cost_trimmed() << ", with time " << time_elapsed_ms << " ms" << std::endl;
   tree->print();
 

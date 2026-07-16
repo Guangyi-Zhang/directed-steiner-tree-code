@@ -318,6 +318,11 @@ auto main(int argc, char** argv) -> int {
   double time_elapsed_ms = 1000.0 * (c_end-c_start) / CLOCKS_PER_SEC;
   /* FINISH RUNNING */
 
+  if (!tree->is_valid(dt.terms_dm)) {
+    spdlog::critical("{} returned an invalid solution tree", method);
+    return 1;
+  }
+
   auto rss = getPeakRSS();
 
   // record results as a json string

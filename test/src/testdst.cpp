@@ -36,6 +36,23 @@ TEST_CASE("adaptive_level1") {
 }
 
 
+TEST_CASE("Tree validation") {
+  using namespace dst;
+
+  std::vector<std::pair<int,int>> edges {{0, 1}, {1, 2}};
+  std::vector<float> weights {1, 1};
+  std::vector<int> terms {2};
+  DST dt {edges, weights, 0, terms};
+
+  auto tree = dt.level1_alg();
+  CHECK(tree->is_valid(dt.terms_dm));
+
+  const int terminal = *dt.terms_dm.begin();
+  tree->trace[terminal] = 0;
+  CHECK_FALSE(tree->is_valid(dt.terms_dm));
+}
+
+
 TEST_CASE("level1") {
   /*
     <---+0+--->
