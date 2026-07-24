@@ -1296,10 +1296,11 @@ namespace dst {
     }
 
 
-    // Root-adaptive fast level-2: fixed terminal-side distances, dynamic root-side
-    // distances. One persistent backward CoordinatedDijkstra; per-center Fenwick
-    // indexes maintain best terminal prefixes as discoveries arrive.
-    auto adaptive_fast_level2_alg(int rerank_L = 5) {
+  private:
+    // Shared root-adaptive fast level-2 implementation. The center index type
+    // controls only how alive prefixes are maintained.
+    template <class CenterIndex>
+    auto adaptive_fast_level2_impl(int rerank_L, const std::string &center_index_name) {
       validate_rerank_l(rerank_L);
       auto par = std::make_shared<PartialTreeManager> (root);
       par->trace_t = nullptr;
@@ -1311,13 +1312,14 @@ namespace dst {
         par->debuginfo["rerank_L"] = std::to_string(rerank_L);
         par->debuginfo["rerank_candidates_evaluated"] = "0";
         par->debuginfo["rerank_realized_delta_calls"] = "0";
+        par->debuginfo["center_index"] = center_index_name;
         add_observed_pool_debug_info(par, Level2ObservedPoolStats {});
         return par;
       }
 
       // One lazily allocated index per root-reachable center v: terminals are
       // inserted in nondecreasing d(v,t) order.
-      std::unordered_map<int, AdaptiveLevel2CenterIndex> center_idxs;
+      std::unordered_map<int, CenterIndex> center_idxs;
 
       // Terminal-side search runs once for the whole algorithm run.
       CoordinatedDijkstra cosssp {graph.rev_offset, graph.rev_target,
@@ -1331,7 +1333,7 @@ namespace dst {
       Level2ObservedPoolStats observed_pool_stats;
 
       // Get or create the center index for vertex v, lazily populated from cosssp distances
-      auto ensure_center = [&] (int v) -> AdaptiveLevel2CenterIndex& {
+      auto ensure_center = [&] (int v) -> CenterIndex& {
         // Try to emplace; `inserted` is true only if v is new to the map
         auto [it, inserted] = center_idxs.emplace(
             std::piecewise_construct,
@@ -1560,8 +1562,23 @@ namespace dst {
       par->debuginfo["rerank_L"] = std::to_string(rerank_L);
       par->debuginfo["rerank_candidates_evaluated"] = std::to_string(rerank_candidates_evaluated);
       par->debuginfo["rerank_realized_delta_calls"] = std::to_string(rerank_realized_delta_calls);
+      par->debuginfo["center_index"] = center_index_name;
       add_observed_pool_debug_info(par, observed_pool_stats);
       return par;
+    }
+
+
+  public:
+    // Root-adaptive fast level-2 using dynamic Fenwick prefixes.
+    auto adaptive_fast_level2_alg(int rerank_L = 5) {
+      return adaptive_fast_level2_impl<AdaptiveLevel2CenterIndex>(
+          rerank_L, "fenwick");
+    }
+
+    // Root-adaptive fast level-2 using linear scans instead of Fenwick trees.
+    auto adaptive_fast_level2_no_fenwick_alg(int rerank_L = 5) {
+      return adaptive_fast_level2_impl<AdaptiveLevel2ScanCenterIndex>(
+          rerank_L, "linear_scan");
     }
 
 

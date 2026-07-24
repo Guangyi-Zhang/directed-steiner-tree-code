@@ -708,6 +708,228 @@ namespace dst {
   };
 
 
+  // Per-center index for root-adaptive fast level-2 without Fenwick trees.
+  // Terminals stay in fixed nondecreasing d(v,t) order; alive-prefix queries
+  // scan that order and keep a scalar prefix sum.
+  class AdaptiveLevel2ScanCenterIndex {
+    public:
+    int v {NONVERTEX};
+    std::vector<int> term_order;
+    std::vector<double> distances;
+    std::unordered_map<int, int> rank_of_term;
+    std::vector<unsigned char> alive;
+
+    int m_alive = 0;
+    double w_alive = 0;
+
+    bool cache_valid = false;
+    double cached_d_rv = 0;
+    int cached_nterm = 0;
+    double cached_prefix_weight = 0;
+    double cached_density = std::numeric_limits<double>::max();
+
+    AdaptiveLevel2ScanCenterIndex() {};
+
+    AdaptiveLevel2ScanCenterIndex(int v, int /*max_terms*/) : v {v} {};
+
+    bool insert(int t, double d_vt) {
+      if (has_key(rank_of_term, t))
+        return false;
+
+      int old_m = m_alive;
+      double old_prefix_weight = cached_prefix_weight;
+      int old_nterm = cached_nterm;
+      term_order.push_back(t);
+      distances.push_back(d_vt);
+      rank_of_term[t] = static_cast<int>(term_order.size()) - 1;
+      alive.push_back(1);
+      m_alive++;
+      w_alive += d_vt;
+
+      // A new terminal is appended in nondecreasing distance order.  It can
+      // change the cached prefix only when all previous alive terminals were
+      // selected.  The first terminal is always the only available choice.
+      if (cache_valid) {
+        if (old_m == 0) {
+          cached_nterm = 1;
+          cached_prefix_weight = d_vt;
+          cached_density = (cached_d_rv + d_vt) / cached_nterm;
+        } else if (cached_nterm == old_m and
+                   lq(level2_threshold(old_m, d_vt, cached_prefix_weight),
+                      cached_d_rv)) {
+          cached_nterm = m_alive;
+          cached_prefix_weight += d_vt;
+          cached_density = (cached_d_rv + cached_prefix_weight) / cached_nterm;
+        }
+      }
+
+      return cache_valid and
+             (cached_nterm != old_nterm or
+              cached_prefix_weight != old_prefix_weight);
+    }
+
+    void erase(const std::unordered_set<int> &terms_del) {
+      bool changed = false;
+      for (auto t: terms_del) {
+        if (not has_key(rank_of_term, t))
+          continue;
+        int rank = rank_of_term.at(t);
+        if (alive[rank] == 0)
+          continue;
+        alive[rank] = 0;
+        m_alive--;
+        w_alive -= distances[rank];
+        changed = true;
+      }
+      if (changed)
+        cache_valid = false;
+    }
+
+    int alive_discovered_count() const {
+      return m_alive;
+    }
+
+    double alive_prefix_weight(int nterm) const {
+      if (nterm <= 0)
+        return 0;
+      int selected = 0;
+      double weight = 0;
+      for (size_t rank = 0; rank < alive.size() and selected < nterm; rank++) {
+        if (alive[rank] == 0)
+          continue;
+        weight += distances[rank];
+        selected++;
+      }
+      assert(selected == nterm);
+      return weight;
+    }
+
+    int best_prefix_length(double d_rv) const {
+      if (m_alive == 0)
+        return 0;
+
+      int selected = 0;
+      double prefix_weight = 0;
+      for (size_t rank = 0; rank < alive.size(); rank++) {
+        if (alive[rank] == 0)
+          continue;
+        double next_weight = distances[rank];
+        if (selected > 0 and
+            not lq(level2_threshold(selected, next_weight, prefix_weight), d_rv))
+          break;
+        prefix_weight += next_weight;
+        selected++;
+      }
+      return selected;
+    }
+
+    void refresh_cache(double d_rv) {
+      cached_d_rv = d_rv;
+      cached_nterm = best_prefix_length(d_rv);
+      cached_prefix_weight = alive_prefix_weight(cached_nterm);
+      cached_density = cached_nterm == 0
+          ? std::numeric_limits<double>::max()
+          : (d_rv + cached_prefix_weight) / cached_nterm;
+      cache_valid = true;
+    }
+
+    Level2PruneBound discovered_bound(double d_rv) {
+      if (!cache_valid || !eq(cached_d_rv, d_rv))
+        refresh_cache(d_rv);
+      if (cached_nterm == 0)
+        return Level2PruneBound {};
+      Level2PruneBound bound;
+      bound.nterm = cached_nterm;
+      bound.density = cached_density;
+      return bound;
+    }
+
+    Level2PruneBound optimistic_bound(
+        double d_rv,
+        int total_alive_terms,
+        double terminal_lb,
+        bool terminal_search_exhausted
+    ) {
+      if (!cache_valid || !eq(cached_d_rv, d_rv))
+        refresh_cache(d_rv);
+
+      int unknown = terminal_search_exhausted
+          ? 0
+          : std::max(0, total_alive_terms - m_alive);
+      int total = m_alive + unknown;
+      if (total == 0)
+        return Level2PruneBound {};
+
+      if (m_alive == 0) {
+        Level2PruneBound bound;
+        bound.nterm = total;
+        bound.density = (d_rv + total * terminal_lb) / total;
+        return bound;
+      }
+
+      if (unknown == 0 or cached_nterm < m_alive) {
+        Level2PruneBound bound;
+        bound.nterm = cached_nterm;
+        bound.density = cached_density;
+        return bound;
+      }
+
+      double full_density =
+          (d_rv + w_alive + unknown * terminal_lb) / total;
+      Level2PruneBound bound;
+      if (lq(full_density, cached_density)) {
+        bound.nterm = total;
+        bound.density = full_density;
+      } else {
+        bound.nterm = m_alive;
+        bound.density = cached_density;
+      }
+      return bound;
+    }
+
+    bool discovered_prefix_is_exact(
+        double d_rv,
+        int total_alive_terms,
+        double terminal_lb,
+        bool terminal_search_exhausted
+    ) {
+      auto discovered = discovered_bound(d_rv);
+      auto optimistic = optimistic_bound(
+          d_rv, total_alive_terms, terminal_lb, terminal_search_exhausted
+      );
+      if (discovered.nterm != optimistic.nterm)
+        return false;
+      if (discovered.nterm == 0)
+        return true;
+      return eq(discovered.density, optimistic.density);
+    }
+
+    auto partree(int root, double d_rv, int snapshot_nterm) const {
+      assert(snapshot_nterm >= 0 and snapshot_nterm <= m_alive);
+      auto par = std::make_shared<PartialTree> (root, v, d_rv);
+      int selected = 0;
+      for (size_t rank = 0; rank < alive.size() and selected < snapshot_nterm; rank++) {
+        if (alive[rank] == 0)
+          continue;
+        int t = term_order[rank];
+        par->terms.insert(t);
+        par->distances_t[t] = distances[rank];
+        par->terms_before_ready.push_back(t);
+        par->cost_sc += distances[rank];
+        selected++;
+      }
+      assert(selected == snapshot_nterm);
+      return par;
+    }
+
+    auto partree(int root, double d_rv) {
+      if (!cache_valid || !eq(cached_d_rv, d_rv))
+        refresh_cache(d_rv);
+      return partree(root, d_rv, cached_nterm);
+    }
+  };
+
+
   class PartialTreeManager: public BasePartialTree {
     // can be used a 3-level partial tree if u != NONVERTEX
     public:

@@ -284,6 +284,12 @@ auto main(int argc, char** argv) -> int {
     tree = partree->to_tree();
     debuginfo = &(partree->debuginfo);
   }
+  else if (method.compare("adaptive_fast_level2_no_fenwick") == 0 or
+           method.compare("root_adaptive_fast_level2_no_fenwick") == 0) {
+    partree = dt.adaptive_fast_level2_no_fenwick_alg(rerank_L);
+    tree = partree->to_tree();
+    debuginfo = &(partree->debuginfo);
+  }
   else if (method.compare("full_adaptive_level2") == 0) {
     partree = dt.full_adaptive_level2_alg(rerank_L);
     tree = partree->to_tree();
@@ -363,6 +369,8 @@ auto main(int argc, char** argv) -> int {
     d.AddMember("rerank_candidates_evaluated", rapidjson::Value(static_cast<int64_t>(std::stoll(debuginfo->at("rerank_candidates_evaluated")))), a);
   if (has_key(*debuginfo, "rerank_realized_delta_calls"))
     d.AddMember("rerank_realized_delta_calls", rapidjson::Value(static_cast<int64_t>(std::stoll(debuginfo->at("rerank_realized_delta_calls")))), a);
+  if (has_key(*debuginfo, "center_index"))
+    d.AddMember("center_index", rapidjson::Value(rapidjson::StringRef(debuginfo->at("center_index").c_str())), a);
   for (const char *key : {
       "observed_pool_consider_calls",
       "observed_pool_key_changes",

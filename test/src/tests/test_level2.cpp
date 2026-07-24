@@ -1297,6 +1297,101 @@ TEST_CASE("AdaptiveLevel2CenterIndex certificate matches expected on multiple co
 }
 
 
+TEST_CASE("AdaptiveLevel2ScanCenterIndex matches Fenwick index") {
+  using namespace dst;
+
+  AdaptiveLevel2CenterIndex fenwick {5, 6};
+  AdaptiveLevel2ScanCenterIndex scan {5, 6};
+  std::vector<std::pair<int, double>> discovered {
+    {201, 1.0}, {202, 3.0}, {203, 6.0}, {204, 8.0}
+  };
+
+  auto compare = [&] (double d_rv, int total, double terminal_lb, bool exhausted) {
+    auto f_discovered = fenwick.discovered_bound(d_rv);
+    auto s_discovered = scan.discovered_bound(d_rv);
+    CHECK(f_discovered.nterm == s_discovered.nterm);
+    CHECK(eq(f_discovered.density, s_discovered.density));
+
+    auto f_optimistic = fenwick.optimistic_bound(
+        d_rv, total, terminal_lb, exhausted);
+    auto s_optimistic = scan.optimistic_bound(
+        d_rv, total, terminal_lb, exhausted);
+    CHECK(f_optimistic.nterm == s_optimistic.nterm);
+    CHECK(eq(f_optimistic.density, s_optimistic.density));
+    CHECK(fenwick.discovered_prefix_is_exact(
+        d_rv, total, terminal_lb, exhausted) ==
+          scan.discovered_prefix_is_exact(
+              d_rv, total, terminal_lb, exhausted));
+
+    auto f_tree = fenwick.partree(0, d_rv, f_discovered.nterm);
+    auto s_tree = scan.partree(0, d_rv, s_discovered.nterm);
+    CHECK(f_tree->terms_before_ready == s_tree->terms_before_ready);
+    CHECK(eq(f_tree->cost_sc, s_tree->cost_sc));
+  };
+
+  compare(4.0, 5, 2.0, false);
+  for (auto [t, d]: discovered) {
+    fenwick.insert(t, d);
+    scan.insert(t, d);
+    compare(4.0, 5, 2.0, false);
+  }
+  CHECK(scan.best_prefix_length(2.0) == 1); // equal-density extension is omitted
+  compare(10.0, 5, 2.0, false); // changing d_rv refreshes both caches
+
+  fenwick.erase({201, 203});
+  scan.erase({201, 203});
+  compare(4.0, 5, 2.0, false);
+  compare(10.0, 2, 0.0, true);
+
+  fenwick.erase({202, 204});
+  scan.erase({202, 204});
+  compare(10.0, 5, 2.0, false);
+}
+
+
+TEST_CASE("adaptive_fast_level2_no_fenwick matches root-adaptive results") {
+  using namespace dst;
+
+  std::vector<std::pair<int,int>> edges {
+    {0,1}, {0,2}, {0,3}, {0,4},
+    {1,11}, {2,12}, {3,13},
+    {4,11}, {4,12}, {4,13}
+  };
+  std::vector<float> weights {1,1,1,2.5, 2,2,2, 1,1,1};
+  DST dt(edges, weights, 0, {11,12,13});
+
+  auto fenwick = dt.adaptive_fast_level2_alg(2);
+  auto scan = dt.adaptive_fast_level2_no_fenwick_alg(2);
+  auto fenwick_tree = fenwick->to_tree();
+  auto scan_tree = scan->to_tree();
+
+  CHECK(eq(fenwick->cost_sc, scan->cost_sc));
+  CHECK(eq(fenwick_tree->cost, scan_tree->cost));
+  CHECK(fenwick_tree->is_valid(dt.terms_dm));
+  CHECK(scan_tree->is_valid(dt.terms_dm));
+  CHECK(fenwick->debuginfo.at("center_index") == "fenwick");
+  CHECK(scan->debuginfo.at("center_index") == "linear_scan");
+  CHECK(scan->debuginfo.at("observed_pool_invariant_violations") == "0");
+}
+
+
+TEST_CASE("adaptive_fast_level2_no_fenwick validates API arguments") {
+  using namespace dst;
+  std::vector<std::pair<int,int>> edges {{0, 1}, {1, 2}};
+  std::vector<float> weights {1, 1};
+  DST dt(edges, weights, 0, {2});
+  CHECK_THROWS_AS(dt.adaptive_fast_level2_no_fenwick_alg(0), std::invalid_argument);
+  CHECK_THROWS_AS(dt.adaptive_fast_level2_no_fenwick_alg(-1), std::invalid_argument);
+
+  DST empty(edges, weights, 0, {});
+  auto result = empty.adaptive_fast_level2_no_fenwick_alg();
+  CHECK(result->terms.empty());
+  CHECK(result->subtrees.empty());
+  CHECK(result->debuginfo.at("sssp_nodes_visited") == "0");
+  CHECK(result->debuginfo.at("center_index") == "linear_scan");
+}
+
+
 TEST_CASE("full_adaptive_fast_level2 single behavior") {
   using namespace dst;
 

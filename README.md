@@ -72,11 +72,16 @@ cost 5.5, with time 0.014 ms
 We refer the user to `./test` and `./main` for more usages and algorithms.
 The main experiment binary accepts `level1`, `adaptive_level1`, `level2`,
 `adaptive_level2` (also `root_adaptive_level2`), `adaptive_fast_level2`
-(also `root_adaptive_fast_level2`), `full_adaptive_level2`,
+(also `root_adaptive_fast_level2`), `adaptive_fast_level2_no_fenwick`
+(also `root_adaptive_fast_level2_no_fenwick`), `full_adaptive_level2`,
 `full_adaptive_fast_level2`, `fast_level2`, `level3`, and `fast_level3`.
 `adaptive_fast_level2` uses the dynamic-prefix root-adaptive implementation:
 terminal-side distances are discovered progressively and reused while each
 greedy iteration refreshes only the root-side distances.
+`adaptive_fast_level2_no_fenwick` uses the same root-adaptive search and
+certification, but stores alive terminals in a compact scan-based index instead
+of Fenwick trees. It uses less per-center auxiliary state, while prefix queries
+may take a linear scan.
 For exact adaptive 2-level methods, each greedy iteration keeps the top 5
 scored-density candidates by default and reranks that shortlist by realized
 marginal density.  Fast adaptive 2-level methods certify only the top scored
