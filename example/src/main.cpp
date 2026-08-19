@@ -30,7 +30,7 @@ int main(int argc, char** argv) {
 
   /* START RUNNING */
 
-  std::string method = "fast_level2";
+  std::string method = (argc > 1) ? argv[1] : "fast_level2";
   double alpha = 1;
   int nthresholds = 50;
 

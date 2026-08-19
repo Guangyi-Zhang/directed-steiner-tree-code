@@ -31,34 +31,58 @@ dpkg-deb -x libboost1.83-dev_*.deb ./third_party/boost-dev
 
 ## Example
 
-See `./example` for a concrete example.
+The `example/` target demonstrates the C++ API on a small directed graph.
+See `example/src/main.cpp` for the full program.
+
+### Build and run
+
 ```bash
-# or, bash example.sh
 cmake -S ./ -B build -DCMAKE_BUILD_TYPE=RelWithDebInfo -DUSE_TEST=0 -DUSE_MAIN=0 -DUSE_EXAMPLE=1
 cmake --build build
-./build/example/Example
+./build/example/Example fast_level2
 ```
 
-For input as follows,
+Or use the helper script (pass the method name as the first argument):
+
+```bash
+bash example.sh fast_level2
+```
+
+The example binary accepts `level2` and `fast_level2`.
+The experiment binary in `main/` exposes the full method list via `--method`.
+
+### Code sketch
+
 ```cpp
-std::vector<std::pair<int,int>> edges {std::make_pair(0,1), 
-                                       std::make_pair(0,2), 
-                                       std::make_pair(0,3), 
-                                       std::make_pair(0,4), 
-                                       std::make_pair(1,11), 
-                                       std::make_pair(2,12), 
-                                       std::make_pair(3,13), 
-                                       std::make_pair(4,11), 
-                                       std::make_pair(4,12), 
-                                       std::make_pair(4,13)};
-std::vector<double> weights {1,1,1,2.5, 2,2,2, 1,1,1};
-std::vector<int> terms {11,12,13};
+#include "dst/dst.hpp"
+
+// Input graph: root = 0, terminals = {11, 12, 13}
+//   0→1, 0→2, 0→3  (weight 1)
+//   0→4             (weight 2.5)
+//   1→11, 2→12, 3→13  (weight 2)
+//   4→11, 4→12, 4→13  (weight 1)
+std::vector<std::pair<int,int>> edges = {{0,1}, {0,2}, {0,3}, {0,4},
+                                         {1,11}, {2,12}, {3,13},
+                                         {4,11}, {4,12}, {4,13}};
+std::vector<float> weights = {1, 1, 1, 2.5, 2, 2, 2, 1, 1, 1};
+std::vector<int> terms = {11, 12, 13};
 int root = 0;
+
+dst::DST dt(edges, weights, root, terms);
+auto partree = dt.fast_level2_alg();
+auto tree = partree->to_tree();
 ```
 
-The output with the `fast_level2` algorithm is 
+The `DST` constructor removes unreachable vertices, then attaches zero-weight
+dummy edges so each terminal can be tracked internally. Every returned tree is
+checked for feasibility (a root-directed path to each terminal) before printing.
+
+### Output
+
+Running `fast_level2` on this instance gives cost **5.5**:
+
 ```
-cost 5.5, with time 0.014 ms
+cost 5.5, with time 0.023 ms
 └──0
     └──4 (002.5)
         ├──13 (001.0)
@@ -69,43 +93,30 @@ cost 5.5, with time 0.014 ms
             └──14 (000.0)
 ```
 
-We refer the user to `./test` and `./main` for more usages and algorithms.
-The main experiment binary accepts `level1`, `adaptive_level1`, `level2`,
-`adaptive_level2` (also `root_adaptive_level2`), `adaptive_fast_level2`
-(also `root_adaptive_fast_level2`), `adaptive_fast_level2_no_fenwick`
-(also `root_adaptive_fast_level2_no_fenwick`), `full_adaptive_level2`,
-`full_adaptive_fast_level2`, `fast_level2`, `level3`, and `fast_level3`.
-`adaptive_fast_level2` uses the dynamic-prefix root-adaptive implementation:
-terminal-side distances are discovered progressively and reused while each
-greedy iteration refreshes only the root-side distances.
-`adaptive_fast_level2_no_fenwick` uses the same root-adaptive search and
-certification, but stores alive terminals in a compact scan-based index instead
-of Fenwick trees. It uses less per-center auxiliary state, while prefix queries
-may take a linear scan.
-For exact adaptive 2-level methods, each greedy iteration keeps the top 5
-scored-density candidates by default and reranks that shortlist by realized
-marginal density.  Fast adaptive 2-level methods certify only the top scored
-candidate, then rerank a bounded pool of concrete observed prefixes discovered
-during that certificate.  Scored pools are ordered by lower scored density,
-fewer terminals, then lower center id; realized reranking uses lower realized
-density with the same scored tie keys. Density ordering uses exact raw values;
-`EPSILON` comparisons are reserved for assertions and diagnostics. Pass
-`rerank_L = 1` to the C++ API to recover single-candidate scored selection.
-All adaptive 2-level C++ entry points reject `rerank_L < 1` with
-`std::invalid_argument`. Another terminal is added only when it strictly
-improves scored density.
+Edge weights are shown in parentheses. Dummy terminal nodes used internally are also printed with zero weight.
 
-Fast adaptive 2-level results also report `observed_pool_consider_calls`,
-`observed_pool_key_changes`, `observed_pool_admissions`,
-`observed_pool_rejections`, `observed_pool_materializations`, and
-`observed_pool_invariant_violations`. These 64-bit counters distinguish cheap
-snapshot maintenance from final `PartialTree` materialization. Normally,
-materializations are at most `rerank_L` per greedy iteration and invariant
-violations are zero.
+### Algorithms
 
-The example and experiment binaries validate every returned solution tree after
-the algorithm completes. This feasibility check verifies a root-directed path
-to every internally represented terminal and is excluded from recorded runtime.
+**Level 1** — direct root-to-terminal paths.
+
+| Method | C++ API | Summary |
+|--------|---------|---------|
+| `level1` | `level1_alg()` | One multi-terminal Dijkstra from the root; take the union of shortest paths to all terminals. |
+| `adaptive_level1` | `adaptive_level1_alg()` | Greedy variant: repeatedly connect the nearest uncovered terminal, then zero out covered edges before the next Dijkstra. |
+
+**Level 2** — root → center → terminal bunches, chosen greedily by terminal density.
+
+| Method | C++ API | Summary |
+|--------|---------|---------|
+| `level2` | `level2_alg()` | Exact 2-level greedy: each step materializes every center candidate and picks the best realized density. |
+| `fast_level2` | `fast_level2_alg()` | Same greedy rule as `level2`, but prunes centers with coordinated reverse Dijkstra and cheap lower bounds. |
+| `adaptive_level2` | `adaptive_level2_alg(rerank_L=5)` | Root-adaptive 2-level: terminal-side distances are fixed; root-side distances are refreshed each iteration. Keeps the top `rerank_L` scored candidates and reranks them by realized density. Alias: `root_adaptive_level2`. |
+| `full_adaptive_level2` | `full_adaptive_level2_alg(rerank_L=5)` | Fully adaptive 2-level: both root-side and terminal-side distances are refreshed each iteration, with the same top-`rerank_L` reranking. |
+| `adaptive_fast_level2` | `adaptive_fast_level2_alg(rerank_L=5)` | Fast root-adaptive 2-level with dynamic-prefix center indices (Fenwick trees). Alias: `root_adaptive_fast_level2`. |
+| `adaptive_fast_level2_no_fenwick` | `adaptive_fast_level2_no_fenwick_alg(rerank_L=5)` | Same search as `adaptive_fast_level2`, but uses scan-based center indices (less auxiliary memory, linear prefix queries). Alias: `root_adaptive_fast_level2_no_fenwick`. |
+| `full_adaptive_fast_level2` | `full_adaptive_fast_level2_alg(rerank_L=5)` | Fully adaptive 2-level with fast pruning and observed-prefix reranking. |
+
+Adaptive 2-level entry points require `rerank_L >= 1` and throw `std::invalid_argument` otherwise. Pass `rerank_L = 1` to disable multi-candidate reranking.
 
 
 ## Tests
